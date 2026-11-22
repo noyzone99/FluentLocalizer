@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluentLocalizer.WebApp;
@@ -24,6 +25,12 @@ internal sealed class PlaygroundSession : IDisposable
 
     public PlaygroundStore Store { get; }
     public ITranslator Translator { get; }
+
+    public static bool TryParseNumber(string value, out decimal number) =>
+        decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number);
+
+    public static string NumberLiteral(decimal number) =>
+        number.ToString(CultureInfo.InvariantCulture) + "m";
 
     public void Dispose() => _services.Dispose();
 }

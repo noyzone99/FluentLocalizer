@@ -38,6 +38,16 @@ public sealed class WebAppIntegrationTests
         Assert.Throws<TranslationException>(() => first.Translator.Get("playground").Resolve());
     }
 
+    [Theory]
+    [InlineData("100000000000000000000", "100000000000000000000m")]
+    [InlineData("9007199254740993.0", "9007199254740993.0m")]
+    [InlineData(" -2.50e-2 ", "-0.0250m")]
+    public void Playground_generates_decimal_literals_for_numbers_accepted_in_preview(string input, string expected)
+    {
+        Assert.True(PlaygroundSession.TryParseNumber(input, out var number));
+        Assert.Equal(expected, PlaygroundSession.NumberLiteral(number));
+    }
+
     [Fact]
     public void Initial_reference_matches_public_API_snapshot_from_published_0_0_1_packages()
     {
