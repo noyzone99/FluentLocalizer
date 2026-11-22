@@ -170,6 +170,7 @@
 
     /// <summary>The documentation set being read: its scope's packages and the versions of its major release line.</summary>
     [CascadingParameter] private DocsSet Set { get; set; } = default!;
+    [SupplyParameterFromQuery(Name = "version")] private string? RequestedVersion { get; set; }
 
     private string[] Packages => Set.Scope.Packages;
     private string _query = "";
@@ -186,10 +187,9 @@
         : release.Version)).ToArray();
 
     // The changelog links to a version with ?version=; otherwise the set's latest published version is shown.
-    protected override void OnInitialized()
+    protected override void OnParametersSet()
     {
-        var requested = SiteLinks.QueryValue(Navigation.Uri, "version");
-        _version = Set.Releases.Any(release => release.Version == requested) ? requested! : Set.LatestRelease;
+        _version = Set.Releases.Any(release => release.Version == RequestedVersion) ? RequestedVersion! : Set.LatestRelease;
     }
 
     // A version of another major release line opens the reference of its documentation set.
@@ -197,7 +197,7 @@
     {
         if (Set.Releases.Any(release => release.Version == version))
         {
-            _version = version;
+            Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("version", version));
             return;
         }
         var set = DocsSets.ForVersion(Set.ScopeId, version);

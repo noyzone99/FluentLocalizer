@@ -24,17 +24,16 @@ else if (_missing)
 
     protected override void OnParametersSet()
     {
-        var address = Navigation.ToBaseRelativePath(Navigation.Uri);
-        var fragment = address.Contains('#') ? address[(address.IndexOf('#') + 1)..] : "";
+        var address = new Uri(Navigation.Uri);
         // Each page and query gets its own component, so the API reference reads the requested version again.
-        _address = address.Split('#')[0];
+        _address = address.PathAndQuery;
         var segments = (Path ?? "").Split('/', StringSplitOptions.RemoveEmptyEntries);
         (_set, _page, _missing) = (null, null, false);
 
         if (segments.Length == 0 || !DocsSets.ScopeIds.Contains(segments[0]))
         {
             // Addresses from before the documentation was versioned, such as docs/templates or docs/api#api-translator.
-            Redirect(DocsSets.LegacyRoute(string.Join('/', segments), fragment));
+            Redirect(DocsSets.LegacyRoute(string.Join('/', segments), address), address);
             return;
         }
 
@@ -42,9 +41,10 @@ else if (_missing)
         if (set is null)
         {
             // docs/core and docs/core/templates open the latest major version.
-            var latest = DocsSets.Latest(segments[0]);
-            var page = latest.FindPath(string.Join('/', segments.Skip(1)));
-            Redirect(page is null ? null : latest.RouteOf(page) + (fragment.Length > 0 ? "#" + fragment : ""));
+            var alias = string.Join('/', segments.Skip(1));
+            var target = DocsSets.ForAlias(segments[0], alias, address);
+            var page = target.FindPath(alias);
+            Redirect(page is null ? null : target.RouteOf(page), address);
             return;
         }
 
@@ -53,7 +53,7 @@ else if (_missing)
         if (found is null && path.Length == 0)
         {
             // A set without a page at its root opens on its first page.
-            Redirect(set.RouteOf(set.Pages[0]));
+            Redirect(set.RouteOf(set.Pages[0]), address);
             return;
         }
         _set = set;
@@ -61,9 +61,9 @@ else if (_missing)
         _missing = found is null;
     }
 
-    private void Redirect(string? route)
+    private void Redirect(string? route, Uri address)
     {
         if (route is null) _missing = true;
-        else Navigation.NavigateTo(route, replace: true);
+        else Navigation.NavigateTo(route + address.Query + address.Fragment, replace: true);
     }
 }
