@@ -6,6 +6,7 @@ on:
     paths:
       - 'Sources/FluentLocalizer.WebApp/**'
       - 'Docs/api-reference.json'
+      - 'Docs/SemanticVersion.cs'
       - 'Sources/FluentLocalizer.Core/**'
       - 'Sources/FluentLocalizer.Extensions.DependencyInjection/**'
       - 'Sources/FluentLocalizer.Store.Json/**'

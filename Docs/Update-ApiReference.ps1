@@ -5,14 +5,13 @@ $root = Split-Path $PSScriptRoot -Parent
 $catalog = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'api-reference.json') -Raw | ConvertFrom-Json
 $tick = [char]96
 $site = 'https://noyzone99.github.io/FluentLocalizer/'
+$semanticVersion = 'FluentLocalizer.Documentation.SemanticVersion' -as [type]
+if (-not $semanticVersion) {
+    Add-Type -LiteralPath (Join-Path $PSScriptRoot 'SemanticVersion.cs')
+}
 
 function Compare-ApiVersion([string]$Left, [string]$Right) {
-    $l = $Left.Split('-', 2); $r = $Right.Split('-', 2)
-    $result = ([version]$l[0]).CompareTo([version]$r[0])
-    if ($result -ne 0) { return $result }
-    if ($l.Count -ne $r.Count) { return $(if ($l.Count -gt $r.Count) { -1 } else { 1 }) }
-    if ($l.Count -eq 1) { return 0 }
-    return [string]::CompareOrdinal($l[1], $r[1])
+    [FluentLocalizer.Documentation.SemanticVersion]::Compare($Left, $Right)
 }
 
 # Each package belongs to one scope, which owns its version numbers: Core (core and DI) or one store.

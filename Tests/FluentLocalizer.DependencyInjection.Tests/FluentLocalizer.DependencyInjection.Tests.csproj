@@ -24,6 +24,7 @@
   <ItemGroup>
     <Using Include="Xunit" />
     <Compile Include="..\PublicApiReferenceTests.cs" Link="PublicApiReferenceTests.cs" />
+    <Compile Include="..\..\Docs\SemanticVersion.cs" Link="SemanticVersion.cs" />
     <EmbeddedResource Include="..\..\Docs\api-reference.json" LogicalName="FluentLocalizer.ApiReference.json" />
   </ItemGroup>
 </Project>
