@@ -82,7 +82,9 @@
         collapseOnNarrow: details => {
             const narrow = window.matchMedia("(max-width: 760px)");
             details.open = !narrow.matches;
-            narrow.addEventListener("change", event => { if (!event.matches) details.open = true; });
+            const reopen = event => { if (!event.matches) details.open = true; };
+            narrow.addEventListener("change", reopen);
+            return { dispose: () => narrow.removeEventListener("change", reopen) };
         },
 
         // True when a dropdown menu fits above its trigger but not below it.

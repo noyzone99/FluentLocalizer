@@ -109,8 +109,10 @@
 
     private ElementReference _menu;
     private ElementReference _sidebar;
+    private IJSObjectReference? _menuWatcher;
     private IJSObjectReference? _sectionWatcher;
     private string? _watchedPage;
+    private bool _disposed;
 
     // Highlights the sidebar link of the section being read; on narrow screens the menu starts collapsed.
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -119,13 +121,27 @@
         {
             if (firstRender)
             {
-                await JS.InvokeVoidAsync("fluentSite.collapseOnNarrow", _menu);
+                var menuWatcher = await JS.InvokeAsync<IJSObjectReference>("fluentSite.collapseOnNarrow", _menu);
+                if (_disposed)
+                {
+                    await DisposeWatcherAsync(menuWatcher);
+                    return;
+                }
+                _menuWatcher = menuWatcher;
                 await JS.InvokeVoidAsync("fluentSite.scrollToHash");
             }
-            if (_watchedPage == PageKey) return;
-            _watchedPage = PageKey;
-            await DisposeWatcherAsync();
-            _sectionWatcher = await JS.InvokeAsync<IJSObjectReference>("fluentSite.watchSections", _sidebar);
+            var page = PageKey;
+            if (_disposed || _watchedPage == page) return;
+            _watchedPage = page;
+            var previousWatcher = _sectionWatcher;
+            _sectionWatcher = null;
+            await DisposeWatcherAsync(previousWatcher);
+            if (_disposed || _watchedPage != page) return;
+            var sectionWatcher = await JS.InvokeAsync<IJSObjectReference>("fluentSite.watchSections", _sidebar);
+            if (_disposed || _watchedPage != page)
+                await DisposeWatcherAsync(sectionWatcher);
+            else
+                _sectionWatcher = sectionWatcher;
         }
         catch (JSException exception)
         {
@@ -133,17 +149,29 @@
         }
     }
 
-    private async Task DisposeWatcherAsync()
+    private static async Task DisposeWatcherAsync(IJSObjectReference? watcher)
     {
-        if (_sectionWatcher is null) return;
+        if (watcher is null) return;
         try
         {
-            await _sectionWatcher.InvokeVoidAsync("dispose");
-            await _sectionWatcher.DisposeAsync();
+            await watcher.InvokeVoidAsync("dispose");
         }
         catch (JSDisconnectedException) { }
-        _sectionWatcher = null;
+        finally
+        {
+            try { await watcher.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
     }
 
-    public ValueTask DisposeAsync() => new(DisposeWatcherAsync());
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        var menuWatcher = _menuWatcher;
+        var sectionWatcher = _sectionWatcher;
+        _menuWatcher = null;
+        _sectionWatcher = null;
+        try { await DisposeWatcherAsync(menuWatcher); }
+        finally { await DisposeWatcherAsync(sectionWatcher); }
+    }
 }
