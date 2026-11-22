@@ -18,6 +18,12 @@ The JSON store examples also require `FluentLocalizer.Store.Json`:
 dotnet add package FluentLocalizer.Store.Json
 ```
 
+In a standalone console application, the basic registration example also needs `Microsoft.Extensions.Logging`. It brings in the service provider implementation used by `BuildServiceProvider()`. ASP.NET Core and generic .NET hosts already supply these services.
+
+```bash
+dotnet add package Microsoft.Extensions.Logging
+```
+
 ## Basic registration
 
 ```csharp
@@ -33,14 +39,14 @@ services.AddFluentLocalizer(options =>
     options.MissingKeyBehavior = MissingTranslationBehavior.ReturnConfiguredValue;
     options.MissingKeyFallbackValue = "[{key}]";
 })
-    .WithStore(new JsonFileStore(new JsonFileStoreOptions
+    .WithStore(_ => new JsonFileStore(new JsonFileStoreOptions
     {
         ResourcesPath = "Locales",
         FallbackCulture = "en-US"
     }))
     .WithLogger();
 
-var provider = services.BuildServiceProvider();
+using var provider = services.BuildServiceProvider();
 var translator = provider.GetRequiredService<ITranslator>();
 
 var message = translator.Get("Welcome")
@@ -89,7 +95,7 @@ using Microsoft.Extensions.Hosting;
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddFluentLocalizer()
-    .WithStore(new JsonFileStore(new JsonFileStoreOptions
+    .WithStore(_ => new JsonFileStore(new JsonFileStoreOptions
     {
         ResourcesPath = "Locales",
         FallbackCulture = "en-US",

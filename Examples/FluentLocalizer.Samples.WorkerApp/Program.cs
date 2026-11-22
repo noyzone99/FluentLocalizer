@@ -26,7 +26,7 @@ JsonFileStoreOptions storeOptions = new()
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddFluentLocalizer(translationOptions)
-    .WithStore(new JsonFileStore(storeOptions))
+    .WithStore(_ => new JsonFileStore(storeOptions))
     .WithLogger();
 
 builder.Services.AddHostedService<Worker>();
