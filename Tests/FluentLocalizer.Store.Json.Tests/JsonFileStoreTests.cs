@@ -311,6 +311,31 @@ public sealed class JsonFileStoreTests
         AssertEventually(() => Assert.Null(store.GetTemplate(key, culture)));
     }
 
+    [Fact]
+    public void Reload_on_change_invalidates_catalogs_when_culture_directories_move_or_disappear()
+    {
+        using var locales = new TemporaryLocaleDirectory();
+        locales.Write("en/common.json", "{\"Value\":\"moved\"}");
+        using var store = new JsonFileStore(new JsonFileStoreOptions
+        {
+            ResourcesPath = locales.Path,
+            FallbackCulture = "en",
+            ReloadOnChange = true
+        });
+        var english = CultureInfo.GetCultureInfo("en");
+        var french = CultureInfo.GetCultureInfo("fr");
+        const string key = "common:Value";
+        Assert.Equal("moved", store.GetTemplate(key, english));
+
+        var destination = Path.Combine(locales.Path, "fr");
+        Directory.Move(Path.Combine(locales.Path, "en"), destination);
+        AssertEventually(() => Assert.Null(store.GetTemplate(key, english)));
+        AssertEventually(() => Assert.Equal("moved", store.GetTemplate(key, french)));
+
+        Directory.Delete(destination, recursive: true);
+        AssertEventually(() => Assert.Null(store.GetTemplate(key, french)));
+    }
+
     private static void AssertEventually(Action assertion)
     {
         var deadline = DateTime.UtcNow.AddSeconds(5);

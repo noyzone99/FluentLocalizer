@@ -40,24 +40,24 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
         if (_options.ReloadOnChange) StartWatcher();
     }
 
-    private void LoadFiles()
+    private void LoadFiles(bool validate = true)
     {
         if (!Directory.Exists(_path))
         {
             Interlocked.Exchange(ref _files, new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase));
             UpdateCultureIndex();
-            if (Options.ThrowOnMissingStore) throw new FileNotFoundException($"Translation directory '{_path}' was not found.");
+            if (validate && Options.ThrowOnMissingStore) throw new FileNotFoundException($"Translation directory '{_path}' was not found.");
             return;
         }
 
         var files = Directory.GetFiles(_path, "*.json", SearchOption.AllDirectories);
-        if (files.Length == 0 && Options.ThrowOnMissingStore)
+        if (files.Length == 0 && validate && Options.ThrowOnMissingStore)
             throw new FileNotFoundException($"No translation JSON files were found in '{_path}'.");
         var indexed = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in files)
         {
             indexed[GetRelativePath(path)] = 0;
-            if (Options.ThrowOnMissingStore)
+            if (validate && Options.ThrowOnMissingStore)
             {
                 EnsureNoLinks(path);
                 using var document = JsonDocument.Parse(ReadJson(path));
@@ -214,22 +214,60 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
     private void StartWatcher()
     {
         Directory.CreateDirectory(_path);
-        _watcher = new FileSystemWatcher(_path, "*.json")
+        _watcher = new FileSystemWatcher(_path)
         {
-            NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.CreationTime,
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.CreationTime,
             IncludeSubdirectories = true
         };
-        _watcher.Changed += (_, e) => { LoadFile(e.FullPath); InvalidateFile(e.FullPath); };
-        _watcher.Created += (_, e) => { LoadFile(e.FullPath); InvalidateFile(e.FullPath); };
-        _watcher.Renamed += (sender, e) => { Volatile.Read(ref _files).TryRemove(GetRelativePath(e.OldFullPath), out _); LoadFile(e.FullPath); UpdateCultureIndex(); InvalidateFile(e.OldFullPath); InvalidateFile(e.FullPath); };
-        _watcher.Deleted += (sender, e) => { Volatile.Read(ref _files).TryRemove(GetRelativePath(e.FullPath), out _); UpdateCultureIndex(); InvalidateFile(e.FullPath); };
-        _watcher.Error += (_, _) =>
+        _watcher.Changed += (_, e) => UpdateWatchedFile(e.FullPath);
+        _watcher.Created += (_, e) =>
         {
-            try { LoadFiles(); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
-            InvalidateCache();
+            if (Directory.Exists(e.FullPath)) RefreshWatchedIndex();
+            else UpdateWatchedFile(e.FullPath);
         };
+        _watcher.Renamed += (_, e) =>
+        {
+            if (Directory.Exists(e.FullPath) || HasIndexedDescendants(e.OldFullPath)) RefreshWatchedIndex();
+            else
+            {
+                RemoveWatchedFile(e.OldFullPath);
+                UpdateWatchedFile(e.FullPath);
+            }
+        };
+        _watcher.Deleted += (_, e) =>
+        {
+            if (HasIndexedDescendants(e.FullPath)) RefreshWatchedIndex();
+            else RemoveWatchedFile(e.FullPath);
+        };
+        _watcher.Error += (_, _) => RefreshWatchedIndex();
         _watcher.EnableRaisingEvents = true;
+    }
+
+    private void UpdateWatchedFile(string path)
+    {
+        if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) || Directory.Exists(path)) return;
+        LoadFile(path);
+        InvalidateFile(path);
+    }
+
+    private void RemoveWatchedFile(string path)
+    {
+        if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return;
+        if (Volatile.Read(ref _files).TryRemove(GetRelativePath(path), out _)) UpdateCultureIndex();
+        InvalidateFile(path);
+    }
+
+    private bool HasIndexedDescendants(string path)
+    {
+        var prefix = GetRelativePath(path) + "/";
+        return Volatile.Read(ref _files).Keys.Any(file => file.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void RefreshWatchedIndex()
+    {
+        try { LoadFiles(validate: false); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        InvalidateCache();
     }
 
     /// <inheritdoc />
