@@ -12,6 +12,7 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
     private readonly object _templateCacheLock = new();
     private readonly Dictionary<string, LinkedListNode<(string Key, string Value)>> _templateCache = new(StringComparer.Ordinal);
     private readonly LinkedList<(string Key, string Value)> _templateCacheOrder = new();
+    private long _templateCacheGeneration;
     // ponytail: cap retained strings at 512 entries; tune only if real workloads need a different bound.
     private const int TemplateCacheCapacity = 512;
 
@@ -64,6 +65,7 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
     public virtual string? GetTemplate(string key, CultureInfo culture)
     {
         var cacheKey = culture.Name + "\0" + key;
+        long generation;
         lock (_templateCacheLock)
         {
             if (_templateCache.TryGetValue(cacheKey, out var cached))
@@ -72,6 +74,7 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
                 _templateCacheOrder.AddFirst(cached);
                 return cached.Value.Value;
             }
+            generation = _templateCacheGeneration;
         }
 
         var result = FindTemplate(key, culture);
@@ -82,6 +85,9 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
         {
             lock (_templateCacheLock)
             {
+                // A reload can invalidate a result while FindTemplate is still running.
+                if (generation != _templateCacheGeneration) return result;
+
                 if (_templateCache.TryGetValue(cacheKey, out var existing))
                 {
                     _templateCacheOrder.Remove(existing);
@@ -109,6 +115,7 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
     {
         lock (_templateCacheLock)
         {
+            _templateCacheGeneration++;
             _templateCache.Clear();
             _templateCacheOrder.Clear();
         }
