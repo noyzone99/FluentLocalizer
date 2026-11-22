@@ -296,6 +296,48 @@ public sealed class HttpJsonStoreTests
 
     #if NET8_0_OR_GREATER
     [Fact]
+    public async Task First_load_during_refresh_uses_the_refreshed_catalog()
+    {
+        var refreshStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRefresh = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var revision = "old";
+        var handler = new StubHttpHandler(async (request, token) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/manifest.json", StringComparison.Ordinal))
+            {
+                if (request.Headers.CacheControl?.NoCache == true)
+                {
+                    refreshStarted.SetResult();
+                    await releaseRefresh.Task.WaitAsync(token);
+                    revision = "new";
+                }
+                return CreateJsonResponse("[\"en-US.json\",\"it-IT.json\"]");
+            }
+            return CreateJsonResponse($$"""{"Value":"{{revision}}"}""");
+        }) { ServeManifest = true };
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("https://example.test/") };
+        using var store = new HttpJsonStore(client);
+        var token = TestContext.Current.CancellationToken;
+        var english = CultureInfo.GetCultureInfo("en-US");
+        var italian = CultureInfo.GetCultureInfo("it-IT");
+        await store.LoadAsync(english, token);
+
+        var refresh = store.RefreshStoreAsync(token);
+        Task<string?> italianLookup;
+        try
+        {
+            await refreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
+            italianLookup = store.GetTemplateAsync("Value", italian, token);
+        }
+        finally { releaseRefresh.SetResult(); }
+
+        await refresh.WaitAsync(TimeSpan.FromSeconds(5), token);
+        Assert.Equal("new", await italianLookup.WaitAsync(TimeSpan.FromSeconds(5), token));
+        Assert.Equal("new", store.GetTemplate("Value", italian));
+        Assert.Equal("new", store.GetTemplate("Value", english));
+    }
+
+    [Fact]
     public async Task Independent_cultures_can_load_while_another_request_is_pending()
     {
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

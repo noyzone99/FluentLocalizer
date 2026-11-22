@@ -218,7 +218,13 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
     private async Task LoadCultureAsync(CultureInfo culture, string? key, CancellationToken cancellationToken, bool forceRefresh = false)
     {
         await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
-        var state = _cultures.GetOrAdd(culture.Name, static _ => new CultureCache());
+        if (!_cultures.TryGetValue(culture.Name, out var state))
+        {
+            // Register before or after a refresh so the first load uses the same catalog as the other cultures.
+            await _refreshGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try { state = _cultures.GetOrAdd(culture.Name, static _ => new CultureCache()); }
+            finally { _refreshGate.Release(); }
+        }
         while (true)
         {
             await state.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
