@@ -205,8 +205,12 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
         {
             EnsureLoaded(culture);
             var value = FindTemplate(key, culture);
-            if (value is not null || culture.Name.Equals(_options.FallbackCulture, StringComparison.OrdinalIgnoreCase))
-                return value;
+            if (value is not null) return value;
+            if (culture.Name.Equals(_options.FallbackCulture, StringComparison.OrdinalIgnoreCase))
+            {
+                EnsureAvailable(culture);
+                return null;
+            }
             var fallback = CultureInfo.GetCultureInfo(_options.FallbackCulture);
             EnsureLoaded(fallback);
             EnsureAvailable(culture);

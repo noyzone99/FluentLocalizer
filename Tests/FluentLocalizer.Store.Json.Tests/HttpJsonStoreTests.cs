@@ -72,6 +72,7 @@ public sealed class HttpJsonStoreTests
 
         using var strict = new HttpJsonStore(client, new HttpJsonStoreOptions { ThrowOnMissingStore = true });
         await Assert.ThrowsAsync<FileNotFoundException>(() => strict.GetTemplateAsync("Missing", new CultureInfo("it-IT"), TestContext.Current.CancellationToken));
+        Assert.Throws<FileNotFoundException>(() => strict.GetTemplate("Missing", CultureInfo.GetCultureInfo("en-US")));
     }
 
     [Fact]

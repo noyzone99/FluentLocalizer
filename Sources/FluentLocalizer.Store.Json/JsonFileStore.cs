@@ -115,15 +115,7 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
     protected override string? FindTemplate(string key, System.Globalization.CultureInfo culture)
     {
         var cache = Volatile.Read(ref _documentCache);
-        var available = AvailableCultures();
-        var selected = JsonStoreCore.SelectCulture(culture, available);
-        var fallback = JsonStoreCore.SelectCulture(System.Globalization.CultureInfo.GetCultureInfo(Options.FallbackCulture), available);
-        var candidates = new List<string>();
-        if (selected is not null)
-            candidates.AddRange(JsonStoreCore.ResolveFileCandidates(System.Globalization.CultureInfo.GetCultureInfo(selected), selected, Options.FileMappings, key));
-        if (fallback?.Equals(selected, StringComparison.OrdinalIgnoreCase) == false)
-            candidates.AddRange(JsonStoreCore.ResolveFileCandidates(System.Globalization.CultureInfo.GetCultureInfo(fallback), fallback, Options.FileMappings, key));
-        foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var candidate in EnumerateCandidates(key, culture).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             var cacheKey = candidate.Replace('\\', '/');
             var path = Path.GetFullPath(Path.Combine(_path, JsonStoreCore.ValidateRelativeJsonPath(candidate).Replace('/', Path.DirectorySeparatorChar)));
@@ -164,6 +156,24 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
         }
 
         return null;
+    }
+
+    private IEnumerable<string> EnumerateCandidates(string key, System.Globalization.CultureInfo culture)
+    {
+        var available = AvailableCultures();
+        var selected = JsonStoreCore.SelectCulture(culture, available);
+        if (selected is not null)
+        {
+            foreach (var candidate in JsonStoreCore.ResolveFileCandidates(System.Globalization.CultureInfo.GetCultureInfo(selected), selected, Options.FileMappings, key))
+                yield return candidate;
+        }
+
+        var fallback = JsonStoreCore.SelectCulture(System.Globalization.CultureInfo.GetCultureInfo(Options.FallbackCulture), available);
+        if (fallback is not null && !fallback.Equals(selected, StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var candidate in JsonStoreCore.ResolveFileCandidates(System.Globalization.CultureInfo.GetCultureInfo(fallback), fallback, Options.FileMappings, key))
+                yield return candidate;
+        }
     }
 
     private void EnsureNoLinks(string path)

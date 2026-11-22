@@ -30,6 +30,19 @@ public sealed class JsonFileStoreTests
         Assert.Equal("fallback", store.GetTemplate("Value", new CultureInfo("de-DE")));
     }
 
+    [Fact]
+    public void Requested_translation_is_found_before_selecting_the_fallback_culture()
+    {
+        using var files = new TemporaryLocaleDirectory();
+        files.Write("fr-FR.json", "{\"Value\":\"French\"}");
+        files.Write("en-GB.json", "{\"Value\":\"British English\"}");
+        using var store = new JsonFileStore(new JsonFileStoreOptions { ResourcesPath = files.Path });
+        var culture = CultureInfo.GetCultureInfo("fr-FR");
+
+        Assert.Equal("French", store.GetTemplate("Value", culture));
+        Assert.Throws<FileNotFoundException>(() => store.GetTemplate("Missing", culture));
+    }
+
     [Theory]
     [InlineData("it-IT.common.json", "specific flat namespace")]
     [InlineData("it-IT/common.json", "specific folder namespace")]
