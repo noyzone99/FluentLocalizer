@@ -181,11 +181,11 @@ public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
         {
             using var reader = new StreamReader(stream);
             using var text = JsonDocument.Parse(reader.ReadToEnd());
-            return text.RootElement.Clone();
+            return JsonStoreCore.RequireObjectRoot(text.RootElement).Clone();
         }
 
         using var document = JsonDocument.Parse(stream);
-        return document.RootElement.Clone();
+        return JsonStoreCore.RequireObjectRoot(document.RootElement).Clone();
     }
 
     private static bool HasUtf16OrUtf32Bom(Stream stream)

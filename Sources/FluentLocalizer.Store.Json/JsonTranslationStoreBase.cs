@@ -23,19 +23,19 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
     protected IReadOnlyList<string> ResolveCandidates(CultureInfo culture) =>
         JsonStoreCore.ResolveCandidates(culture, Options.FallbackCulture, Options.FileMappings);
 
-    /// <summary>Parses and caches a JSON document under its file name.</summary>
+    /// <summary>Parses and caches a JSON object under its file name.</summary>
     /// <param name="name">The file name used during culture resolution.</param>
     /// <param name="json">The JSON document contents.</param>
     protected void SetDocument(string name, string json)
     {
         using var document = JsonDocument.Parse(json);
-        _documents[name] = document.RootElement.Clone();
+        SetDocument(name, document.RootElement);
     }
 
-    /// <summary>Clones and caches a parsed JSON root element.</summary>
+    /// <summary>Clones and caches a parsed JSON root object.</summary>
     /// <param name="name">The file name used during culture resolution.</param>
     /// <param name="root">The JSON root element.</param>
-    protected void SetDocument(string name, JsonElement root) => _documents[name] = root.Clone();
+    protected void SetDocument(string name, JsonElement root) => _documents[name] = JsonStoreCore.RequireObjectRoot(root).Clone();
 
     /// <summary>Removes a cached JSON document.</summary>
     /// <param name="name">The cached file name.</param>
@@ -128,6 +128,10 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
 
 internal static class JsonStoreCore
 {
+    internal static JsonElement RequireObjectRoot(JsonElement root) => root.ValueKind == JsonValueKind.Object
+        ? root
+        : throw new JsonException("A translation catalog must contain a JSON object at the root.");
+
     internal static string? CultureFromPath(string path)
     {
         var parts = path.Replace('\\', '/').Split('/');

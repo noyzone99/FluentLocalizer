@@ -88,9 +88,10 @@ public sealed class EmbeddedJsonStoreTests
     }
 
     [Fact]
-    public void Load_on_demand_reads_a_namespace_file_only_for_its_keys()
+    public void Load_on_demand_rejects_a_non_object_namespace_when_its_keys_are_requested()
     {
         var options = Options("EmbeddedLocales/Broken");
+        options.FallbackCulture = "it";
         options.ThrowOnMissingStore = true;
         options.LoadOnDemand = true;
         var store = new EmbeddedJsonStore(options);

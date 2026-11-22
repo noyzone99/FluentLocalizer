@@ -65,7 +65,7 @@ A key is a path through nested JSON objects, with `:` between segments. Each str
 - Only string values are templates. A key that reaches a number, boolean, array, `null` or object is treated as missing.
 - An empty or whitespace-only string is returned by the store, but the translator treats it as a missing translation (`[key]`) and does **not** fall back to another culture. Remove the key to let fallback work.
 - `.` has no special meaning: `"Home.Title"` is a single property, reached by the key `Home.Title`.
-- Files must be strict JSON with an object at the root: comments and trailing commas are syntax errors. `JsonFileStore` and `EmbeddedJsonStore` silently skip an invalid file unless `ThrowOnMissingStore` is enabled; `HttpJsonStore` always throws `JsonException`.
+- Translation catalogs require a JSON object at the root and reject comments and trailing commas. `JsonFileStore` and `EmbeddedJsonStore` skip invalid catalogs by default and throw `JsonException` with `ThrowOnMissingStore`. `HttpJsonStore` always throws `JsonException` for invalid catalogs.
 - Save files as UTF-8.
 
 ### Namespaces

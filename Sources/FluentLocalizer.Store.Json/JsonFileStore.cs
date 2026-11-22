@@ -61,6 +61,7 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
             {
                 EnsureNoLinks(path);
                 using var document = JsonDocument.Parse(ReadJson(path));
+                JsonStoreCore.RequireObjectRoot(document.RootElement);
             }
         }
         Interlocked.Exchange(ref _files, indexed);
@@ -147,7 +148,7 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
                         if (!File.Exists(path)) continue;
                         EnsureNoLinks(path);
                         using var document = JsonDocument.Parse(ReadJson(path));
-                        root = document.RootElement.Clone();
+                        root = JsonStoreCore.RequireObjectRoot(document.RootElement).Clone();
                         slot.Root = root;
                     }
                 }

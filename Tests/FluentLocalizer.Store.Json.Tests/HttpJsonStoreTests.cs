@@ -131,8 +131,10 @@ public sealed class HttpJsonStoreTests
         Assert.Null(store.GetTemplate("Value", culture));
     }
 
-    [Fact]
-    public async Task Invalid_refresh_preserves_the_loaded_snapshot()
+    [Theory]
+    [InlineData("{invalid")]
+    [InlineData("[]")]
+    public async Task Invalid_refresh_preserves_the_loaded_snapshot(string invalidCatalog)
     {
         var content = "{\"Value\":\"before\"}";
         using var client = new HttpClient(new StubHttpHandler((_, _) => JsonResponse(content)))
@@ -141,7 +143,7 @@ public sealed class HttpJsonStoreTests
         var culture = new CultureInfo("it-IT");
         await store.LoadAsync(culture, TestContext.Current.CancellationToken);
 
-        content = "{invalid";
+        content = invalidCatalog;
         await Assert.ThrowsAnyAsync<System.Text.Json.JsonException>(() => store.RefreshStoreAsync(TestContext.Current.CancellationToken));
         Assert.Equal("before", store.GetTemplate("Value", culture));
     }

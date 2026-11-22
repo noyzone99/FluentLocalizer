@@ -240,11 +240,13 @@ public sealed class JsonFileStoreTests
         }));
     }
 
-    [Fact]
-    public void Invalid_json_is_skipped_by_default_and_throws_when_configured()
+    [Theory]
+    [InlineData("{not-json")]
+    [InlineData("[]")]
+    public void Invalid_catalogs_are_skipped_by_default_and_throw_when_configured(string json)
     {
         using var files = new TemporaryLocaleDirectory();
-        files.Write("it-IT.json", "{not-json");
+        files.Write("it-IT.json", json);
         using var quiet = new JsonFileStore(new JsonFileStoreOptions { ResourcesPath = files.Path });
         Assert.Null(quiet.GetTemplate("Value", new CultureInfo("it-IT")));
 
