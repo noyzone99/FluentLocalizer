@@ -128,10 +128,10 @@ public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
 
         void AddCulture(CultureInfo candidateCulture)
         {
-            if (Options.FileMappings.TryGetValue(candidateCulture.Name, out var mapped))
-                Add(mapped, ns.Length > 0 && JsonStoreCore.IsNamespaceFileName(mapped, ns));
             foreach (var name in new[] { candidateCulture.Name, candidateCulture.TwoLetterISOLanguageName })
             {
+                if (Options.FileMappings.TryGetValue(name, out var mapped))
+                    Add(mapped, ns.Length > 0 && JsonStoreCore.IsNamespaceFileName(mapped, ns));
                 if (ns.Length > 0) Add($"{name}.{ns}.json", true);
                 Add(name + ".json", false);
             }

@@ -203,17 +203,18 @@ internal static class JsonStoreCore
             if (seen.Add(candidate)) candidates.Add(candidate);
         }
 
-        if (mappings.TryGetValue(culture.Name, out var mapped)) Add(mapped);
-        Add($"{culture.Name}.json");
-        Add(culture.TwoLetterISOLanguageName + ".json");
-
-        if (!culture.Name.Equals(fallbackCulture, StringComparison.OrdinalIgnoreCase))
+        void AddCulture(CultureInfo candidate)
         {
-            if (mappings.TryGetValue(fallbackCulture, out var fallbackMapped)) Add(fallbackMapped);
-            var fallback = CultureInfo.GetCultureInfo(fallbackCulture);
-            Add(fallback.Name + ".json");
-            Add(fallback.TwoLetterISOLanguageName + ".json");
+            if (mappings.TryGetValue(candidate.Name, out var mapped)) Add(mapped);
+            Add(candidate.Name + ".json");
+            var neutral = candidate.TwoLetterISOLanguageName;
+            if (mappings.TryGetValue(neutral, out var neutralMapped)) Add(neutralMapped);
+            Add(neutral + ".json");
         }
+
+        AddCulture(culture);
+        if (!culture.Name.Equals(fallbackCulture, StringComparison.OrdinalIgnoreCase))
+            AddCulture(CultureInfo.GetCultureInfo(fallbackCulture));
 
         return candidates;
     }
@@ -241,16 +242,18 @@ internal static class JsonStoreCore
             }
             Add(candidateCulture.Name + ".json");
             Add(Path.Combine(candidateCulture.Name, candidateCulture.Name + ".json"));
-            if (!candidateCulture.Name.Equals(candidateCulture.TwoLetterISOLanguageName, StringComparison.OrdinalIgnoreCase))
+            var neutral = candidateCulture.TwoLetterISOLanguageName;
+            if (!candidateCulture.Name.Equals(neutral, StringComparison.OrdinalIgnoreCase))
             {
+                if (mappings.TryGetValue(neutral, out var neutralMapped)) Add(neutralMapped);
                 if (namespaced)
                 {
-                    Add($"{candidateCulture.TwoLetterISOLanguageName}.{segments[0]}.json");
-                    Add($"{segments[0]}.{candidateCulture.TwoLetterISOLanguageName}.json");
-                    Add(Path.Combine(candidateCulture.TwoLetterISOLanguageName, segments[0] + ".json"));
+                    Add($"{neutral}.{segments[0]}.json");
+                    Add($"{segments[0]}.{neutral}.json");
+                    Add(Path.Combine(neutral, segments[0] + ".json"));
                 }
-                Add(candidateCulture.TwoLetterISOLanguageName + ".json");
-                Add(Path.Combine(candidateCulture.TwoLetterISOLanguageName, candidateCulture.TwoLetterISOLanguageName + ".json"));
+                Add(neutral + ".json");
+                Add(Path.Combine(neutral, neutral + ".json"));
             }
         }
 
