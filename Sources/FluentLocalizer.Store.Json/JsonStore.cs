@@ -24,6 +24,7 @@ public sealed class JsonStore : ITranslationStore, IDisposable
                     ResourcesPath = options.ResourcesPath,
                     FallbackCulture = options.FallbackCulture,
                     ThrowOnMissingStore = options.ThrowOnMissingStore,
+                    MaxDocumentBytes = options.MaxDocumentBytes,
                     ReloadOnChange = options.ReloadOnChange
                 };
                 CopyMappings(options, fileOptions);
@@ -37,6 +38,7 @@ public sealed class JsonStore : ITranslationStore, IDisposable
                     ResourcesPath = options.ResourcesPath,
                     ResourceAssembly = options.ResourceAssembly,
                     FallbackCulture = options.FallbackCulture,
+                    MaxDocumentBytes = options.MaxDocumentBytes,
                     ThrowOnMissingStore = options.ThrowOnMissingStore
                 };
                 CopyMappings(options, embeddedOptions);
