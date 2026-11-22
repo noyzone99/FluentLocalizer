@@ -4,11 +4,11 @@
 		<PackageId>FluentLocalizer.Extensions.DependencyInjection</PackageId>
 		<Product>FluentLocalizer.Extensions.DependencyInjection</Product>
 		<RootNamespace>FluentLocalizer.Core</RootNamespace>
-		<Version>1.1.0</Version>
+		<Version>1.2.0</Version>
 		<Description>
 			Dependency injection extensions for registering FluentLocalizer translators, stores, and logging services in .NET applications.
 		</Description>
-		<PackageReleaseNotes>Add a native .NET 11 target while retaining .NET Standard 2.0, .NET 8 and .NET 10 support. Public APIs and translation behavior are unchanged.</PackageReleaseNotes>
+		<PackageReleaseNotes>Update the Core dependency to FluentLocalizer 1.2.0. Correct the standalone quick start and show container-owned disposable stores in hosted applications.</PackageReleaseNotes>
 		<PackageTags>dependencyinjection;di;localization;translation;dotnet;services</PackageTags>
 		<GenerateDependencyFile>false</GenerateDependencyFile>
 	</PropertyGroup>

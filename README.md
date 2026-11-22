@@ -99,7 +99,7 @@ dotnet build FluentLocalizer.slnx --configuration Release
 dotnet test FluentLocalizer.slnx --configuration Release
 ```
 
-Use the .NET 11 SDK to build the solution. The library projects target `netstandard2.0`, `net8.0`, `net10.0`, and `net11.0`; the samples and the website target `net11.0`. Core and DI 1.1.0 and JSON store 1.2.0 add the .NET 11 target without changing public APIs. DI uses Microsoft.Extensions 11 on .NET 11 and 10.0.15 on the earlier targets; the .NET Standard JSON store uses System.Text.Json 10.0.15. The test projects also target `net472`, so run the full test matrix on Windows. On other platforms, run the `.NET 11` tests with `dotnet test FluentLocalizer.slnx --configuration Release --framework net11.0`. The website's browser script has its own Node.js test: `node Tests/FluentLocalizer.WebApp.Tests/site.test.cjs`.
+Use the .NET 11 SDK to build the solution. The library projects target `netstandard2.0`, `net8.0`, `net10.0` and `net11.0`. The samples and website target `net11.0`. Core and DI 1.2.0 and JSON store 1.3.0 support catalog-aware ICU plural and ordinal rules. DI uses Microsoft.Extensions 11 on .NET 11 and 10.0.15 on the earlier targets. The .NET Standard JSON store uses System.Text.Json 10.0.15. The test projects also target `net472`, so run the full test matrix on Windows. On other platforms, run the `.NET 11` tests with `dotnet test FluentLocalizer.slnx --configuration Release --framework net11.0`. Run the website script tests with `node --test Tests/FluentLocalizer.WebApp.Tests/site.test.cjs`.
 
 **Run sample projects:**
 

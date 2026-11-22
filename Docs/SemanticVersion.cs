@@ -2,8 +2,10 @@ using System;
 
 namespace FluentLocalizer.Documentation
 {
+    /// <summary>Compares the semantic versions used in the documentation catalog.</summary>
     public static class SemanticVersion
     {
+        /// <summary>Returns the precedence of the left version relative to the right version.</summary>
         public static int Compare(string left, string right)
         {
             var leftParts = SplitVersion(left);

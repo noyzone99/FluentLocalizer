@@ -8,7 +8,21 @@ Every release of the FluentLocalizer packages, newest first. The [WebUI changelo
 
 Packages: `FluentLocalizer`, `FluentLocalizer.Extensions.DependencyInjection`
 
-Catalog-aware plural and ordinal rules and fixes to translation resolution.
+Catalog-aware plurals and ordinals, more reliable translation resolution, and updated examples and documentation.
+
+### Added
+
+- The optional `ITranslationStoreWithCulture` contract lets stores supply ICU plural and ordinal rules from the catalog culture. Number and date formats follow the requested culture. See [Culture selection](https://noyzone99.github.io/FluentLocalizer/docs/core/v1/culture#fallback).
+
+### Changed
+
+- ICU formatters are reused with a bounded lifetime to reduce repeated parsing.
+
+### Fixed
+
+- Exception factories propagate their errors and run once for each failure. Concurrent option reference changes are read safely. Identifier casing handles combining characters and supplementary letters, and fallback tokens preserve literal keys.
+- The DI quick start includes the logging prerequisite for a standalone console. The Worker registers its disposable store through a container-owned factory.
+- The Playground generates precise C# decimal literals. The API reference keeps the selected release in the URL, redirects retain links to historical versions, and the documentation sidebar releases its listeners when navigating away. Prerelease comparisons follow SemVer precedence.
 
 <details><summary>Public API changes (1)</summary>
 
@@ -20,9 +34,32 @@ Catalog-aware plural and ordinal rules and fixes to translation resolution.
 
 Packages: `FluentLocalizer.Store.Json`
 
-Catalog-culture reporting and fixes to JSON lookup, validation and refresh.
+Catalog-culture reporting, atomic HTTP refresh, cancellable response reads and consistent JSON lookup.
 
-No public API changes in this version.
+### Added
+
+- The JSON stores report the selected catalog culture through `ITranslationStoreWithCulture`. This release depends on FluentLocalizer 1.2.0.
+
+### Changed
+
+- The embedded candidate cache is bounded. The legacy `JsonStore` wrapper forwards `MaxDocumentBytes` to the selected store.
+
+### Fixed
+
+- HTTP refresh coordinates first loads of new cultures with the catalog update. Cancellation stops reads of catalogs and manifests even when a document size limit is configured.
+- Catalogs must have a JSON object at the root. A rejected HTTP refresh keeps the previous catalog, and an in-flight lookup cannot put an invalidated base-store result back in the cache.
+- Filesystem reload handles directory events and consults fallback only after looking for the requested key. HTTP synchronous lookup applies the same strict fallback check as asynchronous lookup.
+- Namespace files stay distinct from combined culture catalogs. Reverse names and dotted embedded namespaces resolve correctly, and regional lookups respect neutral culture mappings.
+- The Blazor sample preloads base culture files and downloads its namespace bundle on first use.
+
+<details><summary>Public API changes (4)</summary>
+
+- Changed: `JsonFileStore` — Reports the selected catalog culture through ITranslationStoreWithCulture and invalidates catalogs when watched directories change.
+- Changed: `EmbeddedJsonStore` — Reports the selected catalog culture through ITranslationStoreWithCulture. Supports dotted namespaces and limits its candidate cache.
+- Changed: `HttpJsonStore` — Reports the selected catalog culture through ITranslationStoreWithCulture. Coordinates first culture loads with refresh and respects cancellation during catalog and manifest reads.
+- Changed: `JsonStore` — Forwards MaxDocumentBytes and exposes the selected store's catalog culture through ITranslationStoreWithCulture.
+
+</details>
 
 ## Core 1.1.0 (2026-11-16)
 

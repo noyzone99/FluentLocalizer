@@ -58,7 +58,14 @@
         {
           "Version": "1.2.0",
           "SourceRevision": "core-v1.2.0",
-          "Summary": "Catalog-aware plural and ordinal rules and fixes to translation resolution."
+          "Summary": "Catalog-aware plurals and ordinals, more reliable translation resolution, and updated examples and documentation.",
+          "Notes": [
+            {"Kind": "Added", "Text": "The optional `ITranslationStoreWithCulture` contract lets stores supply ICU plural and ordinal rules from the catalog culture. Number and date formats follow the requested culture. See [Culture selection](docs/core/v1/culture#fallback)."},
+            {"Kind": "Fixed", "Text": "Exception factories propagate their errors and run once for each failure. Concurrent option reference changes are read safely. Identifier casing handles combining characters and supplementary letters, and fallback tokens preserve literal keys."},
+            {"Kind": "Changed", "Text": "ICU formatters are reused with a bounded lifetime to reduce repeated parsing."},
+            {"Kind": "Fixed", "Text": "The DI quick start includes the logging prerequisite for a standalone console. The Worker registers its disposable store through a container-owned factory."},
+            {"Kind": "Fixed", "Text": "The Playground generates precise C# decimal literals. The API reference keeps the selected release in the URL, redirects retain links to historical versions, and the documentation sidebar releases its listeners when navigating away. Prerelease comparisons follow SemVer precedence."}
+          ]
         }
       ]
     },
@@ -127,7 +134,16 @@
         {
           "Version": "1.3.0",
           "SourceRevision": "store-json-v1.3.0",
-          "Summary": "Catalog-culture reporting and fixes to JSON lookup, validation and refresh."
+          "Summary": "Catalog-culture reporting, atomic HTTP refresh, cancellable response reads and consistent JSON lookup.",
+          "Notes": [
+            {"Kind": "Added", "Text": "The JSON stores report the selected catalog culture through `ITranslationStoreWithCulture`. This release depends on FluentLocalizer 1.2.0."},
+            {"Kind": "Fixed", "Text": "HTTP refresh coordinates first loads of new cultures with the catalog update. Cancellation stops reads of catalogs and manifests even when a document size limit is configured."},
+            {"Kind": "Fixed", "Text": "Catalogs must have a JSON object at the root. A rejected HTTP refresh keeps the previous catalog, and an in-flight lookup cannot put an invalidated base-store result back in the cache."},
+            {"Kind": "Fixed", "Text": "Filesystem reload handles directory events and consults fallback only after looking for the requested key. HTTP synchronous lookup applies the same strict fallback check as asynchronous lookup."},
+            {"Kind": "Fixed", "Text": "Namespace files stay distinct from combined culture catalogs. Reverse names and dotted embedded namespaces resolve correctly, and regional lookups respect neutral culture mappings."},
+            {"Kind": "Changed", "Text": "The embedded candidate cache is bounded. The legacy `JsonStore` wrapper forwards `MaxDocumentBytes` to the selected store."},
+            {"Kind": "Fixed", "Text": "The Blazor sample preloads base culture files and downloads its namespace bundle on first use."}
+          ]
         }
       ]
     }
@@ -521,6 +537,9 @@
       ],
       "EarlierDefinitions": [
         {"Before": "1.3.0", "BaseTypes": ["JsonTranslationStoreBase", "IDisposable"]}
+      ],
+      "Changes": [
+        {"Version": "1.3.0", "Description": "Reports the selected catalog culture through ITranslationStoreWithCulture and invalidates catalogs when watched directories change."}
       ]
     },
     {
@@ -542,7 +561,8 @@
         {"Before": "1.3.0", "BaseTypes": ["JsonTranslationStoreBase"]}
       ],
       "Changes": [
-        {"Version": "1.1.0", "Description": "Reads namespace files such as it-IT.common.json, which earlier versions keyed by their last segment, common.json, so the files of different cultures replaced each other. A key with a namespace is looked for in its namespace file before the culture file. FileMappings can still use the last segment when no other file has that name."}
+        {"Version": "1.1.0", "Description": "Reads namespace files such as it-IT.common.json, which earlier versions keyed by their last segment, common.json, so the files of different cultures replaced each other. A key with a namespace is looked for in its namespace file before the culture file. FileMappings can still use the last segment when no other file has that name."},
+        {"Version": "1.3.0", "Description": "Reports the selected catalog culture through ITranslationStoreWithCulture. Supports dotted namespaces and limits its candidate cache."}
       ]
     },
     {
@@ -566,6 +586,9 @@
       ],
       "EarlierDefinitions": [
         {"Before": "1.3.0", "BaseTypes": ["ITranslationStore", "IDisposable"]}
+      ],
+      "Changes": [
+        {"Version": "1.3.0", "Description": "Reports the selected catalog culture through ITranslationStoreWithCulture. Coordinates first culture loads with refresh and respects cancellation during catalog and manifest reads."}
       ]
     },
     {
@@ -591,7 +614,8 @@
         {"Before": "1.3.0", "BaseTypes": ["ITranslationStore", "IDisposable"], "Remarks": "The wrapper forwards lookups but does not copy MaxDocumentBytes."}
       ],
       "Changes": [
-        {"Version": "0.1.0-alpha", "Description": "Reimplemented as a compatibility wrapper over JsonFileStore or EmbeddedJsonStore and marked obsolete. Uses dedicated-store loading and validation; filesystem mode is rejected in browsers."}
+        {"Version": "0.1.0-alpha", "Description": "Reimplemented as a compatibility wrapper over JsonFileStore or EmbeddedJsonStore and marked obsolete. Uses dedicated-store loading and validation; filesystem mode is rejected in browsers."},
+        {"Version": "1.3.0", "Description": "Forwards MaxDocumentBytes and exposes the selected store's catalog culture through ITranslationStoreWithCulture."}
       ]
     },
     {

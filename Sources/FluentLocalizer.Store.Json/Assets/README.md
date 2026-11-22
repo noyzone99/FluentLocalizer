@@ -1,6 +1,6 @@
 # ![](https://raw.githubusercontent.com/noyzone99/FluentLocalizer/main/Sources/FluentLocalizer.WebApp/wwwroot/favicon.svg) FluentLocalizer JSON stores
 
-Version 1.2.0 adds a native `net11.0` target alongside `netstandard2.0`, `net8.0` and `net10.0`. Public APIs are unchanged; building this repository requires the .NET 11 SDK.
+Version 1.3.0 reports the culture of the selected catalog to FluentLocalizer 1.2.0 and improves catalog validation, refresh and fallback. Targets remain `netstandard2.0`, `net8.0`, `net10.0` and `net11.0`. Building this repository requires the .NET 11 SDK.
 
 `FluentLocalizer.Store.Json` contains three `ITranslationStore` implementations for JSON translation files: `JsonFileStore`, `EmbeddedJsonStore`, and `HttpJsonStore`. They share the JSON format, nested keys, culture fallback and file mappings; [Organizing JSON files](#organizing-json-files) explains how to structure the catalogs and where the stores differ.
 

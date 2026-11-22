@@ -1,6 +1,6 @@
 # ![](https://raw.githubusercontent.com/noyzone99/FluentLocalizer/main/Sources/FluentLocalizer.WebApp/wwwroot/favicon.svg) FluentLocalizer
 
-Version 1.1.0 adds a native `net11.0` target alongside `netstandard2.0`, `net8.0` and `net10.0`. Public APIs are unchanged; building this repository requires the .NET 11 SDK.
+Version 1.2.0 adds the optional `ITranslationStoreWithCulture` interface for catalog-aware ICU plural and ordinal rules. It retains `netstandard2.0`, `net8.0`, `net10.0` and `net11.0` targets. Building this repository requires the .NET 11 SDK.
 
 FluentLocalizer is the core package for building culture-aware translation pipelines in .NET applications. It provides a fluent API around an `ITranslationStore`, with templates written in the [ICU message syntax](https://unicode-org.github.io/icu/userguide/format_parse/messages/), runtime arguments, and configurable fallback behavior. Under the hood, templates are parsed and formatted by [MessageFormat](https://github.com/jeffijoe/messageformat.net), the open-source .NET library by Jeff Hansen.
 

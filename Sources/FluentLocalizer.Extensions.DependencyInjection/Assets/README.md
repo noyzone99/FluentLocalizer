@@ -1,6 +1,6 @@
 # ![](https://raw.githubusercontent.com/noyzone99/FluentLocalizer/main/Sources/FluentLocalizer.WebApp/wwwroot/favicon.svg) FluentLocalizer.Extensions.DependencyInjection
 
-Version 1.1.0 adds a native `net11.0` target alongside `netstandard2.0`, `net8.0` and `net10.0`. Public APIs are unchanged; building this repository requires the .NET 11 SDK.
+Version 1.2.0 uses FluentLocalizer 1.2.0 and keeps the existing dependency injection API. Targets remain `netstandard2.0`, `net8.0`, `net10.0` and `net11.0`. Building this repository requires the .NET 11 SDK.
 
 FluentLocalizer.Extensions.DependencyInjection provides ASP.NET Core and generic .NET hosting integration for FluentLocalizer. It registers `ITranslator` and related services in `IServiceCollection`, so you can consume translations from your application with minimal setup.
 
