@@ -45,6 +45,7 @@ public sealed class TranslationOptions
     /// <summary>
     /// Gets or sets the default arguments applied to every translation request unless overridden at runtime.
     /// </summary>
+    /// <remarks>Replace the dictionary when updating options used by concurrent requests.</remarks>
     public IReadOnlyDictionary<string, object?>? DefaultArguments { get; set; }
 
     /// <summary>
@@ -57,9 +58,9 @@ public sealed class TranslationOptions
     {
         Dictionary<string, object?> mergedArguments = new(StringComparer.OrdinalIgnoreCase);
 
-        if (DefaultArguments is not null)
+        if (DefaultArguments is { } defaultArguments)
         {
-            foreach (var argument in DefaultArguments)
+            foreach (var argument in defaultArguments)
             {
                 mergedArguments[argument.Key] = argument.Value;
             }
@@ -89,9 +90,9 @@ public sealed class TranslationOptions
     {
         Guard.IfNullOrWhiteSpace(key);
 
-        if (MissingKeyExceptionFactory is not null)
+        if (MissingKeyExceptionFactory is { } factory)
         {
-            return MissingKeyExceptionFactory(key, culture);
+            return factory(key, culture);
         }
 
         string cultureName = culture?.Name ?? "unknown";
@@ -115,9 +116,9 @@ public sealed class TranslationOptions
     {
         Guard.IfNullOrWhiteSpace(key);
 
-        if (FormattingErrorExceptionFactory is not null)
+        if (FormattingErrorExceptionFactory is { } factory)
         {
-            return FormattingErrorExceptionFactory(key, culture) ?? CreateMissingKeyException(key, culture);
+            return factory(key, culture) ?? CreateMissingKeyException(key, culture);
         }
 
         string detail = innerException?.Message is { Length: > 0 } message ? $" Details: {message}" : string.Empty;
