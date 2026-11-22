@@ -137,11 +137,10 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
         var culture = _culture ?? CultureInfo.CurrentUICulture;
         LogDebug($"Resolving translation request for key '{_key}' for culture '{culture.Name}'.");
 
+        string? template;
         try
         {
-            var template = await _store.GetTemplateAsync(_key, culture, cancellationToken).ConfigureAwait(false);
-            LogDebug($"Retrieved translation template for key '{_key}' for culture '{culture.Name}'.");
-            return ResolveTemplate(template);
+            template = await _store.GetTemplateAsync(_key, culture, cancellationToken).ConfigureAwait(false);
         }
         catch (KeyNotFoundException)
         {
@@ -152,6 +151,9 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
             LogError($"An unexpected exception occurred while resolving translation key '{_key}'.", ex);
             throw;
         }
+
+        LogDebug($"Retrieved translation template for key '{_key}' for culture '{culture.Name}'.");
+        return ResolveTemplate(template);
     }
 
     /// <summary>
@@ -168,9 +170,10 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
         var culture = _culture ?? CultureInfo.CurrentUICulture;
         LogDebug($"Resolving translation request for key '{_key}' for culture '{culture.Name}'.");
 
+        string? template;
         try
         {
-            return ResolveTemplate(_store.GetTemplate(_key, culture));
+            template = _store.GetTemplate(_key, culture);
         }
         catch (KeyNotFoundException)
         {
@@ -181,6 +184,8 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
             LogError($"An unexpected exception occurred while resolving translation key '{_key}'.", ex);
             throw;
         }
+
+        return ResolveTemplate(template);
     }
 
     #endregion Fluent API

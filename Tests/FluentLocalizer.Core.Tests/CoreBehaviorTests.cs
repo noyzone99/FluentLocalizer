@@ -147,6 +147,45 @@ public sealed class CoreBehaviorTests
     }
 
     [Fact]
+    public async Task Formatting_exception_factory_can_return_key_not_found_without_triggering_missing_policy()
+    {
+        var store = new Store();
+        store.Values["welcome"] = "{missing}";
+        var formattingException = new KeyNotFoundException("Formatting failed");
+        var builder = new Translator(store, new TranslationOptions
+        {
+            FormattingErrorBehavior = FormattingErrorBehavior.ThrowException,
+            FormattingErrorExceptionFactory = (_, _) => formattingException
+        }).Get("welcome");
+
+        Assert.Same(formattingException, Assert.Throws<KeyNotFoundException>(() => builder.Resolve()));
+        Assert.Same(formattingException, await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => builder.ResolveAsync(TestContext.Current.CancellationToken)));
+    }
+
+    [Fact]
+    public async Task Missing_exception_factory_is_called_once_when_returning_key_not_found()
+    {
+        var missingException = new KeyNotFoundException("Translation is missing");
+        var calls = 0;
+        var builder = new Translator(new Store(), new TranslationOptions
+        {
+            MissingKeyBehavior = MissingTranslationBehavior.ThrowException,
+            MissingKeyExceptionFactory = (_, _) =>
+            {
+                calls++;
+                return missingException;
+            }
+        }).Get("missing");
+
+        Assert.Same(missingException, Assert.Throws<KeyNotFoundException>(() => builder.Resolve()));
+        Assert.Equal(1, calls);
+        Assert.Same(missingException, await Assert.ThrowsAsync<KeyNotFoundException>(
+            () => builder.ResolveAsync(TestContext.Current.CancellationToken)));
+        Assert.Equal(2, calls);
+    }
+
+    [Fact]
     public void Formatting_exceptions_include_inner_detail_and_options_validate_keys()
     {
         var exception = new TranslationOptions().CreateFormattingException("key", CultureInfo.InvariantCulture, new FormatException("bad format"));
