@@ -1,5 +1,4 @@
 using FluentLocalizer.Logging;
-using Jeffijoe.MessageFormat;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -208,7 +207,6 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
 
         try
         {
-            MessageFormatter mf = new();
             var argumentSet = _options.CreateArgumentSet(_arguments);
             var template = rawTemplate ?? string.Empty;
 
@@ -223,7 +221,7 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
                 argumentSet = lengthArguments;
             }
 
-            string formatted = mf.FormatMessage(template, argumentSet, _culture);
+            string formatted = TranslationFormatter.Format(template, argumentSet, _culture);
             var result = ApplyCaseTransformation(formatted, _case);
             LogDebug($"Translation request completed for key '{_key}' for culture '{_culture?.Name ?? "unknown"}'.");
             return result;

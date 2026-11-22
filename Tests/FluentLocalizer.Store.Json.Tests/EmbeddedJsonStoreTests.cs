@@ -6,6 +6,25 @@ namespace FluentLocalizer.Test;
 
 public sealed class EmbeddedJsonStoreTests
 {
+    #if NET8_0_OR_GREATER
+    [Fact]
+    public void Candidate_cache_has_a_limit_even_with_distinct_requested_cultures()
+    {
+        var store = new EmbeddedJsonStore(Options("EmbeddedLocales/Namespaces"));
+        for (var index = 0; index < 600; index++)
+        {
+            var region = index.ToString("D3", CultureInfo.InvariantCulture);
+            Assert.Null(store.GetTemplate("Unknown", new CultureInfo($"en-{region}")));
+        }
+
+        var cache = typeof(EmbeddedJsonStore).GetField("_candidates",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(cache);
+        Assert.InRange(Assert.IsAssignableFrom<System.Collections.IDictionary>(cache.GetValue(store)).Count, 1, 512);
+        Assert.Equal("Hello", store.GetTemplate("Hello", CultureInfo.GetCultureInfo("en")));
+    }
+    #endif
+
     [Fact]
     public async Task Loads_resources_and_supports_sync_and_async_lookups()
     {

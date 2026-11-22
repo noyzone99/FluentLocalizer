@@ -8,6 +8,7 @@ namespace FluentLocalizer.Store.Json;
 /// <summary>Loads and caches culture JSON files embedded in an assembly.</summary>
 public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
 {
+    private const int CandidateCacheCapacity = 512;
     private readonly Assembly _assembly;
     private readonly Dictionary<string, Resource> _resources = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _namespaces = new(StringComparer.OrdinalIgnoreCase);
@@ -140,7 +141,12 @@ public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
         AddCulture(culture);
         if (!culture.Name.Equals(Options.FallbackCulture, StringComparison.OrdinalIgnoreCase))
             AddCulture(CultureInfo.GetCultureInfo(Options.FallbackCulture));
-        return _candidates.GetOrAdd(cacheKey, candidates.ToArray());
+        lock (_candidates)
+        {
+            if (_candidates.TryGetValue(cacheKey, out cached)) return cached;
+            if (_candidates.Count >= CandidateCacheCapacity) _candidates.Clear();
+            return _candidates[cacheKey] = candidates.ToArray();
+        }
     }
 
     private JsonElement? Load(Resource resource)
