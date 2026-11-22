@@ -230,6 +230,40 @@ public sealed class HttpJsonStoreTests
         Assert.DoesNotContain(handler.Requests, path => path.EndsWith("/it-IT.json", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("/locales/en.json")]
+    [InlineData("/locales/en/en.json")]
+    public async Task Combined_catalog_does_not_count_as_a_namespace_with_its_culture_name(string path)
+    {
+        var handler = new StubHttpHandler((request, _) => JsonResponse(request.RequestUri!.AbsolutePath == path
+            ? "{\"Value\":\"Top-level\"}" : null));
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("https://example.test/") };
+        using var store = new HttpJsonStore(client, new HttpJsonStoreOptions { FallbackCulture = "en" });
+        var culture = CultureInfo.GetCultureInfo("en");
+        var token = TestContext.Current.CancellationToken;
+
+        Assert.Null(await store.GetTemplateAsync("en:Value", culture, token));
+        Assert.Equal("Top-level", store.GetTemplate("Value", culture));
+    }
+
+    [Fact]
+    public async Task Manifest_classifies_reverse_namespace_names_by_the_regional_culture()
+    {
+        var handler = new StubHttpHandler((request, _) => JsonResponse(request.RequestUri!.AbsolutePath switch
+        {
+            "/locales/manifest.json" => "[\"ui.it-IT.json\"]",
+            "/locales/ui.it-IT.json" => "{\"Title\":\"Titolo\"}",
+            _ => null
+        })) { ServeManifest = true };
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("https://example.test/") };
+        using var store = new HttpJsonStore(client);
+        var culture = CultureInfo.GetCultureInfo("it-IT");
+
+        await store.LoadAsync(culture, TestContext.Current.CancellationToken);
+
+        Assert.Equal("Titolo", store.GetTemplate("ui:Title", culture));
+    }
+
     [Fact]
     public async Task Manifest_preloads_namespaces_and_selects_the_first_regional_variant()
     {

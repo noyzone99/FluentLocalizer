@@ -99,6 +99,8 @@ Culture folders are one level deep; files in deeper subfolders are not recognize
 
 The stores build file names from the canonical .NET culture name and from the namespace as written in the key. On case-sensitive file systems and web servers, name files `it-IT.json` (not `it-it.json`) and match the namespace's casing.
 
+If both parts of a flat namespace filename can be read as culture names, the filesystem and HTTP stores prefer the culture name with a region or script. When both names have the same form, the first part supplies the culture. Use a culture folder to make the intended culture explicit. A dotted namespace such as `Ui.Toolbar` can use `it.Ui.Toolbar.json` in an embedded resource folder.
+
 ### Lookup order and fallback
 
 For `common:Buttons:Save` requested in `it-IT`, `JsonFileStore` tries these sources and returns the first string it finds:

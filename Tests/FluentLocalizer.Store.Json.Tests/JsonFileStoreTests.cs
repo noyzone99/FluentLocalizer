@@ -56,15 +56,30 @@ public sealed class JsonFileStoreTests
     }
 
     [Theory]
-    [InlineData("common.it-IT.json")]
-    [InlineData("it-IT.common.json")]
-    [InlineData("it-IT/common.json")]
-    public void Resolves_all_namespace_file_conventions(string path)
+    [InlineData("common.it-IT.json", "common")]
+    [InlineData("it-IT.common.json", "common")]
+    [InlineData("it-IT/common.json", "common")]
+    [InlineData("ui.it-IT.json", "ui")]
+    public void Resolves_all_namespace_file_conventions(string path, string ns)
     {
         using var files = new TemporaryLocaleDirectory();
         files.Write(path, "{\"Section\":{\"Title\":\"Titolo\"}}");
         using var store = new JsonFileStore(new JsonFileStoreOptions { ResourcesPath = files.Path });
-        Assert.Equal("Titolo", store.GetTemplate("common:Section:Title", new CultureInfo("it-IT")));
+        Assert.Equal("Titolo", store.GetTemplate($"{ns}:Section:Title", new CultureInfo("it-IT")));
+    }
+
+    [Theory]
+    [InlineData("en.json")]
+    [InlineData("en/en.json")]
+    public void Combined_catalog_does_not_count_as_a_namespace_with_its_culture_name(string path)
+    {
+        using var files = new TemporaryLocaleDirectory();
+        files.Write(path, "{\"Value\":\"Top-level\"}");
+        using var store = new JsonFileStore(new JsonFileStoreOptions { ResourcesPath = files.Path });
+        var culture = CultureInfo.GetCultureInfo("en");
+
+        Assert.Equal("Top-level", store.GetTemplate("Value", culture));
+        Assert.Null(store.GetTemplate("en:Value", culture));
     }
 
     [Fact]

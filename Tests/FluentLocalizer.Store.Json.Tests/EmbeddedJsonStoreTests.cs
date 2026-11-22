@@ -85,6 +85,7 @@ public sealed class EmbeddedJsonStoreTests
         var store = new EmbeddedJsonStore(options);
 
         Assert.Equal("Titolo", store.GetTemplate("Ui:Title", new CultureInfo("it-IT")));
+        Assert.Equal("Barra", store.GetTemplate("Ui.Toolbar:Title", new CultureInfo("it-IT")));
         Assert.Equal("Titolo", store.GetTemplate(" Ui : Title ", new CultureInfo("it")));
         Assert.Equal("Sottotitolo", store.GetTemplate("Ui:Subtitle", new CultureInfo("it-IT")));
         Assert.Equal("Italian extra", store.GetTemplate("Extra:Extra", new CultureInfo("it-IT")));

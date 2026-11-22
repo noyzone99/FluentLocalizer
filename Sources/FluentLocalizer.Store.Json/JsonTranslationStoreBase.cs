@@ -126,6 +126,8 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
         Task.FromResult(GetTemplate(key, culture));
 }
 
+internal readonly record struct JsonFileCandidate(string Path, string CultureName, bool IsNamespaceFile);
+
 internal static class JsonStoreCore
 {
     internal static JsonElement RequireObjectRoot(JsonElement root) => root.ValueKind == JsonValueKind.Object
@@ -142,8 +144,11 @@ internal static class JsonStoreCore
         if (TryCulture(stem, out var wholeCulture)) return wholeCulture;
         var separator = stem.IndexOf('.');
         if (separator < 0) return null;
-        if (TryCulture(stem[..separator], out var prefixCulture)) return prefixCulture;
-        return TryCulture(stem[(stem.LastIndexOf('.') + 1)..], out var suffixCulture) ? suffixCulture : null;
+        var hasPrefix = TryCulture(stem[..separator], out var prefixCulture);
+        var suffix = stem[(stem.LastIndexOf('.') + 1)..];
+        if ((!hasPrefix || !prefixCulture.Contains('-') && suffix.Contains('-')) && TryCulture(suffix, out var suffixCulture))
+            return suffixCulture;
+        return hasPrefix ? prefixCulture : null;
     }
 
     private static bool TryCulture(string name, out string culture)
@@ -219,42 +224,39 @@ internal static class JsonStoreCore
         return candidates;
     }
 
-    internal static List<string> ResolveFileCandidates(CultureInfo culture, string fallbackCulture, IDictionary<string, string> mappings, string key)
+    internal static List<JsonFileCandidate> ResolveFileCandidates(CultureInfo culture, string fallbackCulture, IDictionary<string, string> mappings, string key)
     {
-        var segments = key.Split(':').Select(static segment => segment.Trim()).Where(static segment => segment.Length > 0).ToArray();
-        var namespaced = HasNamespace(segments);
-        var candidates = new List<string>();
+        var ns = GetNamespace(key, out _);
+        var candidates = new List<JsonFileCandidate>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        void Add(string? path)
+        void Add(string path, string cultureName, bool isNamespaceFile = false)
         {
-            if (!string.IsNullOrWhiteSpace(path) && seen.Add(path!)) candidates.Add(path!);
+            if (string.IsNullOrWhiteSpace(path)) return;
+            var normalized = path.Replace('\\', '/');
+            if (seen.Add(normalized)) candidates.Add(new JsonFileCandidate(normalized, cultureName, isNamespaceFile));
+        }
+
+        void AddVariant(string name)
+        {
+            if (mappings.TryGetValue(name, out var mapped)) Add(mapped, name, ns is not null && IsNamespaceFileName(mapped, ns));
+            if (ns is not null)
+            {
+                Add($"{name}.{ns}.json", name, isNamespaceFile: true);
+                Add($"{ns}.{name}.json", name, isNamespaceFile: true);
+                if (!name.Equals(ns, StringComparison.OrdinalIgnoreCase))
+                    Add(Path.Combine(name, ns + ".json"), name, isNamespaceFile: true);
+            }
+            Add(name + ".json", name);
+            Add(Path.Combine(name, name + ".json"), name);
         }
 
         void AddCulture(CultureInfo candidateCulture)
         {
-            if (mappings.TryGetValue(candidateCulture.Name, out var mapped)) Add(mapped);
-            if (namespaced)
-            {
-                Add($"{candidateCulture.Name}.{segments[0]}.json");
-                Add($"{segments[0]}.{candidateCulture.Name}.json");
-                Add(Path.Combine(candidateCulture.Name, segments[0] + ".json"));
-            }
-            Add(candidateCulture.Name + ".json");
-            Add(Path.Combine(candidateCulture.Name, candidateCulture.Name + ".json"));
+            AddVariant(candidateCulture.Name);
             var neutral = candidateCulture.TwoLetterISOLanguageName;
             if (!candidateCulture.Name.Equals(neutral, StringComparison.OrdinalIgnoreCase))
-            {
-                if (mappings.TryGetValue(neutral, out var neutralMapped)) Add(neutralMapped);
-                if (namespaced)
-                {
-                    Add($"{neutral}.{segments[0]}.json");
-                    Add($"{segments[0]}.{neutral}.json");
-                    Add(Path.Combine(neutral, segments[0] + ".json"));
-                }
-                Add(neutral + ".json");
-                Add(Path.Combine(neutral, neutral + ".json"));
-            }
+                AddVariant(neutral);
         }
 
         AddCulture(culture);
@@ -264,33 +266,19 @@ internal static class JsonStoreCore
         return candidates;
     }
 
-    internal static string GetLookupKey(string key)
-    {
-        var segments = key.Split(':').Select(static segment => segment.Trim()).Where(static segment => segment.Length > 0).ToArray();
-        return HasNamespace(segments)
-            ? string.Join(":", segments.Skip(1))
-            : key;
-    }
-
-    internal static bool IsNamespaceFile(string candidate, string key)
-    {
-        var segments = key.Split(':').Select(static segment => segment.Trim()).Where(static segment => segment.Length > 0).ToArray();
-        if (!HasNamespace(segments))
-            return false;
-
-        return IsNamespaceFileName(candidate, segments[0]);
-    }
-
     internal static bool IsNamespaceFileName(string candidate, string ns)
     {
         var normalized = candidate.Replace('\\', '/');
-        return normalized.StartsWith(ns + ".", StringComparison.OrdinalIgnoreCase) ||
-               normalized.EndsWith("." + ns + ".json", StringComparison.OrdinalIgnoreCase) ||
-               normalized.EndsWith("/" + ns + ".json", StringComparison.OrdinalIgnoreCase);
+        var fileName = ns + ".json";
+        if (normalized.Equals(fileName, StringComparison.OrdinalIgnoreCase)) return false;
+        if (normalized.StartsWith(ns + ".", StringComparison.OrdinalIgnoreCase) ||
+            normalized.EndsWith("." + fileName, StringComparison.OrdinalIgnoreCase)) return true;
+        return normalized.EndsWith("/" + fileName, StringComparison.OrdinalIgnoreCase) &&
+            !("/" + normalized).EndsWith("/" + ns + "/" + fileName, StringComparison.OrdinalIgnoreCase);
     }
 
-    // Same rule as HasNamespace without splitting the key: the first non-empty segment is the namespace when
-    // another non-empty segment follows. rest is where the key continues after that first segment.
+    // The first non-empty segment is the namespace when another non-empty segment follows.
+    // rest is where the key continues after that first segment.
     internal static string? GetNamespace(string key, out int rest)
     {
         rest = 0;
@@ -311,8 +299,6 @@ internal static class JsonStoreCore
 
         return null;
     }
-
-    private static bool HasNamespace(string[] segments) => segments.Length > 1 && IsNamespaceName(segments[0]);
 
     private static bool IsNamespaceName(string segment) =>
         segment.Length > 0 && segment is not "." and not ".." &&
@@ -344,12 +330,18 @@ internal static class JsonStoreCore
         }
         if (start >= resourceName.Length - 5) return null;
 
-        var segments = resourceName[start..^5].Split('.');
-        if (segments.Length != 2 || !TryCulture(segments[0], out var culture)) return null;
-        return segments[1].Split('-')[0].Equals(culture.Split('-')[0], StringComparison.OrdinalIgnoreCase)
-            ? null
-            : $"{culture}.{segments[1]}.json";
+        var stem = resourceName[start..^5];
+        var separator = stem.IndexOf('.');
+        if (separator < 0 || !TryCulture(stem[..separator], out var culture)) return null;
+        var ns = stem[(separator + 1)..];
+        if (!IsNamespaceName(ns) || !ns.Contains('.') && ns.Split('-')[0].Equals(culture.Split('-')[0], StringComparison.OrdinalIgnoreCase))
+            return null;
+        return $"{culture}.{ns}.json";
     }
+
+    internal static bool TryGetValue(JsonElement root, string key, bool isNamespaceFile, out string value) =>
+        TryGetValue(root, key, out value) ||
+        isNamespaceFile && GetNamespace(key, out var rest) is not null && TryGetValue(root, key, rest, out value);
 
     internal static bool TryGetValue(JsonElement root, string key, out string value) => TryGetValue(root, key, 0, out value);
 

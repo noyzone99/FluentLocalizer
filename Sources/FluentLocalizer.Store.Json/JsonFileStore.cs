@@ -115,10 +115,12 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
     protected override string? FindTemplate(string key, System.Globalization.CultureInfo culture)
     {
         var cache = Volatile.Read(ref _documentCache);
-        foreach (var candidate in EnumerateCandidates(key, culture).Distinct(StringComparer.OrdinalIgnoreCase))
+        var searched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var candidate in EnumerateCandidates(key, culture))
         {
-            var cacheKey = candidate.Replace('\\', '/');
-            var path = Path.GetFullPath(Path.Combine(_path, JsonStoreCore.ValidateRelativeJsonPath(candidate).Replace('/', Path.DirectorySeparatorChar)));
+            var cacheKey = candidate.Path;
+            if (!searched.Add(cacheKey)) continue;
+            var path = Path.GetFullPath(Path.Combine(_path, JsonStoreCore.ValidateRelativeJsonPath(cacheKey).Replace('/', Path.DirectorySeparatorChar)));
             if (!path.StartsWith(_path.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                 throw new System.Security.SecurityException("Translation path escapes ResourcesPath.");
             try
@@ -144,9 +146,7 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
                         slot.Root = root;
                     }
                 }
-                if (JsonStoreCore.TryGetValue(root, key, out var value)
-                    || (JsonStoreCore.IsNamespaceFile(candidate, key)
-                    && JsonStoreCore.TryGetValue(root, JsonStoreCore.GetLookupKey(key), out value)))
+                if (JsonStoreCore.TryGetValue(root, key, candidate.IsNamespaceFile, out var value))
                 {
                     return value;
                 }
@@ -158,7 +158,7 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
         return null;
     }
 
-    private IEnumerable<string> EnumerateCandidates(string key, System.Globalization.CultureInfo culture)
+    private IEnumerable<JsonFileCandidate> EnumerateCandidates(string key, System.Globalization.CultureInfo culture)
     {
         var available = AvailableCultures();
         var selected = JsonStoreCore.SelectCulture(culture, available);

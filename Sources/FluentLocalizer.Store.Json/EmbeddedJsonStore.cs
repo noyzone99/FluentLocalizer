@@ -16,7 +16,7 @@ public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
     // Resources to search per culture and namespace, in lookup order. Only namespaces that have a file get an entry.
     private readonly ConcurrentDictionary<(string Culture, string Namespace), Candidate[]> _candidates = new();
 
-    private readonly record struct Candidate(Resource Resource, bool IsNamespaceFile);
+    private readonly record struct Candidate(Resource Resource, string CultureName, bool IsNamespaceFile);
 
     private sealed class Resource(string name)
     {
@@ -121,10 +121,10 @@ public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
 
         var candidates = new List<Candidate>();
         var seen = new HashSet<Resource>();
-        void Add(string? fileName, bool isNamespaceFile)
+        void Add(string? fileName, string cultureName, bool isNamespaceFile)
         {
             if (fileName is not null && _resources.TryGetValue(fileName, out var resource) && seen.Add(resource))
-                candidates.Add(new Candidate(resource, isNamespaceFile));
+                candidates.Add(new Candidate(resource, cultureName, isNamespaceFile));
         }
 
         void AddCulture(CultureInfo candidateCulture)
@@ -132,9 +132,9 @@ public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
             foreach (var name in new[] { candidateCulture.Name, candidateCulture.TwoLetterISOLanguageName })
             {
                 if (Options.FileMappings.TryGetValue(name, out var mapped))
-                    Add(mapped, ns.Length > 0 && JsonStoreCore.IsNamespaceFileName(mapped, ns));
-                if (ns.Length > 0) Add($"{name}.{ns}.json", true);
-                Add(name + ".json", false);
+                    Add(mapped, name, ns.Length > 0 && JsonStoreCore.IsNamespaceFileName(mapped, ns));
+                if (ns.Length > 0) Add($"{name}.{ns}.json", name, true);
+                Add(name + ".json", name, false);
             }
         }
 
