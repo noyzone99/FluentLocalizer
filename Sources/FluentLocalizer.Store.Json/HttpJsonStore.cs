@@ -274,7 +274,7 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
                     }
                     response.EnsureSuccessStatusCode();
                     if (_options.MaxDocumentBytes > 0)
-                        await response.Content.LoadIntoBufferAsync(_options.MaxDocumentBytes).ConfigureAwait(false);
+                        await response.Content.LoadIntoBufferAsync(_options.MaxDocumentBytes, cancellationToken).ConfigureAwait(false);
 #if NET8_0_OR_GREATER
                     await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 #else
@@ -329,7 +329,7 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
             {
                 response.EnsureSuccessStatusCode();
                 if (_options.MaxDocumentBytes > 0)
-                    await response.Content.LoadIntoBufferAsync(_options.MaxDocumentBytes).ConfigureAwait(false);
+                    await response.Content.LoadIntoBufferAsync(_options.MaxDocumentBytes, cancellationToken).ConfigureAwait(false);
 #if NET8_0_OR_GREATER
                 await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 #else

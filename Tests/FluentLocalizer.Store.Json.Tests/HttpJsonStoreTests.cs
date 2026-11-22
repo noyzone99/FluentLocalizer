@@ -178,6 +178,35 @@ public sealed class HttpJsonStoreTests
         Assert.Equal("too large", await unlimited.GetTemplateAsync("Value", new CultureInfo("en-US"), TestContext.Current.CancellationToken));
     }
 
+    [Theory]
+    [InlineData(false, 128)]
+    [InlineData(true, 128)]
+#if !NET8_0_OR_GREATER
+    [InlineData(false, 0)]
+    [InlineData(true, 0)]
+#endif
+    public async Task Cancellation_while_reading_an_http_body_stops_the_lookup(bool useManifest, long maxBytes)
+    {
+        using var content = new StalledHttpContent();
+        using var client = new HttpClient(new StubHttpHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = content
+        })) { ServeManifest = useManifest }) { BaseAddress = new Uri("https://example.test/") };
+        using var store = new HttpJsonStore(client, new HttpJsonStoreOptions { MaxDocumentBytes = maxBytes });
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var lookup = store.GetTemplateAsync("Value", CultureInfo.GetCultureInfo("en-US"), cancellation.Token);
+
+        try
+        {
+            var timeout = Task.Delay(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Same(content.Started.Task, await Task.WhenAny(content.Started.Task, timeout));
+            cancellation.Cancel();
+            Assert.Same(lookup, await Task.WhenAny(lookup, timeout));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => lookup);
+        }
+        finally { content.Release.TrySetResult(true); }
+    }
+
     [Fact]
     public async Task Namespaced_lazy_lookup_loads_only_the_matching_bundle()
     {
@@ -392,6 +421,29 @@ public sealed class HttpJsonStoreTests
     private static HttpResponseMessage CreateJsonResponse(string? json) => json is null
         ? new HttpResponseMessage(HttpStatusCode.NotFound)
         : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+
+    private sealed class StalledHttpContent : HttpContent
+    {
+        internal TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TaskCompletionSource<bool> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+        {
+            Started.TrySetResult(true);
+            return Release.Task;
+        }
+
+#if NET8_0_OR_GREATER
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context, CancellationToken cancellationToken) =>
+            SerializeToStreamAsync(stream, context).WaitAsync(cancellationToken);
+#endif
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
 
     private sealed class StubHttpHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond) : HttpMessageHandler
     {
