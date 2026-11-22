@@ -10,8 +10,8 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
     private readonly ConcurrentDictionary<string, JsonElement> _documents = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly object _templateCacheLock = new();
-    private readonly Dictionary<string, LinkedListNode<(string Key, string Value)>> _templateCache = new(StringComparer.Ordinal);
-    private readonly LinkedList<(string Key, string Value)> _templateCacheOrder = new();
+    private readonly Dictionary<string, LinkedListNode<(string Key, string Template, CultureInfo? Culture)>> _templateCache = new(StringComparer.Ordinal);
+    private readonly LinkedList<(string Key, string Template, CultureInfo? Culture)> _templateCacheOrder = new();
     private long _templateCacheGeneration;
     // ponytail: cap retained strings at 512 entries; tune only if real workloads need a different bound.
     private const int TemplateCacheCapacity = 512;
@@ -62,7 +62,12 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
     }
 
     /// <inheritdoc />
-    public virtual string? GetTemplate(string key, CultureInfo culture)
+    public virtual string? GetTemplate(string key, CultureInfo culture) => GetCachedTemplate(key, culture).Template;
+
+    private protected virtual (string? Template, CultureInfo? Culture) FindTemplateWithCulture(string key, CultureInfo culture) =>
+        (FindTemplate(key, culture), null);
+
+    private protected (string? Template, CultureInfo? Culture) GetCachedTemplate(string key, CultureInfo culture)
     {
         var cacheKey = culture.Name + "\0" + key;
         long generation;
@@ -72,16 +77,16 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
             {
                 _templateCacheOrder.Remove(cached);
                 _templateCacheOrder.AddFirst(cached);
-                return cached.Value.Value;
+                return (cached.Value.Template, cached.Value.Culture);
             }
             generation = _templateCacheGeneration;
         }
 
-        var result = FindTemplate(key, culture);
-        if (result is null && Options.ThrowOnMissingStore && !HasCandidate(culture))
+        var result = FindTemplateWithCulture(key, culture);
+        if (result.Template is null && Options.ThrowOnMissingStore && !HasCandidate(culture))
             throw new FileNotFoundException($"No translation files were found for culture '{culture.Name}' or fallback '{Options.FallbackCulture}'.");
 
-        if (result is not null)
+        if (result.Template is not null)
         {
             lock (_templateCacheLock)
             {
@@ -95,7 +100,7 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
                 }
                 else
                 {
-                    var node = _templateCacheOrder.AddFirst((cacheKey, result));
+                    var node = _templateCacheOrder.AddFirst((cacheKey, result.Template, result.Culture));
                     _templateCache.Add(cacheKey, node);
                     if (_templateCache.Count > TemplateCacheCapacity)
                     {

@@ -53,6 +53,8 @@ It affects that request only and never changes `CurrentUICulture` or `CurrentCul
 
 `Get(key)` captures the culture when it creates the builder, so create a new builder after changing it. Components that cache rendered text need their own update or rerender. On modern .NET, the ambient culture flows through task-based asynchronous operations.
 
+The requested culture controls number and date formatting. JSON stores report the culture of the catalog that supplied the template, so the ICU `plural` and `selectordinal` blocks follow the language of that template even on fallback. When `FileMappings` selects a catalog, its mapping key supplies the culture. Custom stores can opt in by implementing `ITranslationStoreWithCulture`. Stores that use `ITranslationStore` continue to use the requested culture for plural rules.
+
 For application-wide thread defaults, set `CultureInfo.DefaultThreadCurrentUICulture` and `CultureInfo.DefaultThreadCurrentCulture` at startup; these do not override explicitly set thread cultures. In ASP.NET Core, `app.UseRequestLocalization(...)` sets both cultures for each request, so `Get(key)` already follows the user's language; don't change the process-wide defaults per user.
 
 See Microsoft's [CurrentUICulture](https://learn.microsoft.com/dotnet/api/system.globalization.cultureinfo.currentuiculture) and [CurrentCulture](https://learn.microsoft.com/dotnet/api/system.globalization.cultureinfo.currentculture) documentation.

@@ -295,7 +295,7 @@
       "AsyncFlow": "The current cultures are part of the execution context: on modern .NET they flow across `await`, `Task.Run` and other task-based code, so an asynchronous method keeps the culture of the code that called it.",
       "FallbackTitle": "When a language is missing",
       "Fallback1": "Choosing the template when the requested language is not available is the store's job. The JSON stores, for example, look for `it-CH`, then for `it`, then for their `FallbackCulture`, one key at a time: [JSON stores](docs/store-json/v1#fallback) describes the exact rules. A custom store applies the rules you write.",
-      "Fallback2": "Even when the template comes from the fallback language, it is formatted with the culture of the request. An English template served to a German request prints `1.234,5` instead of `1,234.5`, and its `plural` block uses the German plural rules: keep the `other` branch in every template so any language finds a match."
+      "Fallback2": "With Core 1.2.0 and Store.Json 1.3.0, numbers and dates follow the requested culture and plural and ordinal rules follow the culture of the catalog. An English fallback template for a Russian request prints `21 items` and keeps Russian number and date formatting. Custom stores can provide the catalog culture through `ITranslationStoreWithCulture`."
     },
     "Errors": {
       "Nav": "Missing keys and errors",

@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace FluentLocalizer.Store.Json;
 
 /// <summary>Loads and caches culture JSON files embedded in an assembly.</summary>
-public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
+public sealed class EmbeddedJsonStore : JsonTranslationStoreBase, ITranslationStoreWithCulture
 {
     private const int CandidateCacheCapacity = 512;
     private readonly Assembly _assembly;
@@ -89,7 +89,15 @@ public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
     }
 
     /// <inheritdoc />
-    protected override string? FindTemplate(string key, CultureInfo culture)
+    protected override string? FindTemplate(string key, CultureInfo culture) => FindTemplateWithCulture(key, culture).Template;
+
+    (string? Template, CultureInfo? Culture) ITranslationStoreWithCulture.GetTemplateWithCulture(string key, CultureInfo culture) =>
+        GetCachedTemplate(key, culture);
+
+    Task<(string? Template, CultureInfo? Culture)> ITranslationStoreWithCulture.GetTemplateWithCultureAsync(
+        string key, CultureInfo culture, CancellationToken cancellationToken) => Task.FromResult(GetCachedTemplate(key, culture));
+
+    private protected override (string? Template, CultureInfo? Culture) FindTemplateWithCulture(string key, CultureInfo culture)
     {
         var rest = 0;
         var ns = _namespaces.Count == 0 ? null : JsonStoreCore.GetNamespace(key, out rest);
@@ -105,11 +113,11 @@ public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
                 (JsonStoreCore.TryGetValue(root, key, out var value) ||
                  candidate.IsNamespaceFile && JsonStoreCore.TryGetValue(root, key, rest, out value)))
             {
-                return value;
+                return (value, CultureInfo.GetCultureInfo(candidate.CultureName));
             }
         }
 
-        return null;
+        return default;
     }
 
     // Same order as the file and HTTP stores: for the culture, its neutral culture and then the fallback, the mapped

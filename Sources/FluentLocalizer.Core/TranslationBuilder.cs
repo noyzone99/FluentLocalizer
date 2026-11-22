@@ -138,10 +138,12 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
         var culture = _culture ?? CultureInfo.CurrentUICulture;
         LogDebug($"Resolving translation request for key '{_key}' for culture '{culture.Name}'.");
 
-        string? template;
+        (string? Template, CultureInfo? Culture) result;
         try
         {
-            template = await _store.GetTemplateAsync(_key, culture, cancellationToken).ConfigureAwait(false);
+            result = _store is ITranslationStoreWithCulture localized
+                ? await localized.GetTemplateWithCultureAsync(_key, culture, cancellationToken).ConfigureAwait(false)
+                : (await _store.GetTemplateAsync(_key, culture, cancellationToken).ConfigureAwait(false), null);
         }
         catch (KeyNotFoundException)
         {
@@ -154,7 +156,7 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
         }
 
         LogDebug($"Retrieved translation template for key '{_key}' for culture '{culture.Name}'.");
-        return ResolveTemplate(template);
+        return ResolveTemplate(result.Template, culture, result.Culture);
     }
 
     /// <summary>
@@ -171,10 +173,12 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
         var culture = _culture ?? CultureInfo.CurrentUICulture;
         LogDebug($"Resolving translation request for key '{_key}' for culture '{culture.Name}'.");
 
-        string? template;
+        (string? Template, CultureInfo? Culture) result;
         try
         {
-            template = _store.GetTemplate(_key, culture);
+            result = _store is ITranslationStoreWithCulture localized
+                ? localized.GetTemplateWithCulture(_key, culture)
+                : (_store.GetTemplate(_key, culture), null);
         }
         catch (KeyNotFoundException)
         {
@@ -186,7 +190,7 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
             throw;
         }
 
-        return ResolveTemplate(template);
+        return ResolveTemplate(result.Template, culture, result.Culture);
     }
 
     #endregion Fluent API
@@ -195,8 +199,10 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
     /// Formats a raw template with the current arguments and applies the configured case transformation.
     /// </summary>
     /// <param name="rawTemplate">The template content retrieved from the store.</param>
+    /// <param name="requestedCulture">The culture used for number and date formatting.</param>
+    /// <param name="catalogCulture">The culture from which the template was loaded, if known.</param>
     /// <returns>The formatted message, or a fallback value if the template is missing or malformed.</returns>
-    private string ResolveTemplate(string? rawTemplate)
+    private string ResolveTemplate(string? rawTemplate, CultureInfo requestedCulture, CultureInfo? catalogCulture)
     {
         LogDebug($"Formatting translation template for key '{_key}' for culture '{_culture?.Name ?? "unknown"}'.");
 
@@ -221,7 +227,8 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
                 argumentSet = lengthArguments;
             }
 
-            string formatted = TranslationFormatter.Format(template, argumentSet, _culture);
+            var formattingCulture = GetFormattingCulture(requestedCulture, catalogCulture);
+            string formatted = TranslationFormatter.Format(template, argumentSet, formattingCulture);
             var result = ApplyCaseTransformation(formatted, _case);
             LogDebug($"Translation request completed for key '{_key}' for culture '{_culture?.Name ?? "unknown"}'.");
             return result;
@@ -230,6 +237,18 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
         {
             return HandleFormattingException(ex);
         }
+    }
+
+    private static CultureInfo GetFormattingCulture(CultureInfo requested, CultureInfo? catalog)
+    {
+        if (catalog is null || string.Equals(requested.Name, catalog.Name, StringComparison.OrdinalIgnoreCase))
+            return requested;
+
+        // MessageFormat uses the culture name for plural rules and the format providers for numbers and dates.
+        var culture = (CultureInfo)catalog.Clone();
+        culture.NumberFormat = requested.NumberFormat;
+        culture.DateTimeFormat = requested.DateTimeFormat;
+        return culture;
     }
 
     /// <summary>

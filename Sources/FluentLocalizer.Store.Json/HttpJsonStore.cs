@@ -9,7 +9,7 @@ namespace FluentLocalizer.Store.Json;
 
 /// <summary>Loads culture JSON files over HTTP and caches them for synchronous lookups after loading.</summary>
 /// <remarks>The supplied <see cref="HttpClient"/> remains owned by the caller.</remarks>
-public sealed class HttpJsonStore : ITranslationStore, IDisposable
+public sealed class HttpJsonStore : ITranslationStoreWithCulture, IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly HttpJsonStoreOptions _options;
@@ -171,7 +171,14 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
     }
 
     /// <inheritdoc />
-    public async Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)
+    public async Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default) =>
+        (await GetTemplateResultAsync(key, culture, cancellationToken).ConfigureAwait(false)).Template;
+
+    Task<(string? Template, CultureInfo? Culture)> ITranslationStoreWithCulture.GetTemplateWithCultureAsync(
+        string key, CultureInfo culture, CancellationToken cancellationToken) => GetTemplateResultAsync(key, culture, cancellationToken);
+
+    private async Task<(string? Template, CultureInfo? Culture)> GetTemplateResultAsync(
+        string key, CultureInfo culture, CancellationToken cancellationToken)
     {
         Guard.IfNull(culture);
         await LoadCultureAsync(culture, key, cancellationToken).ConfigureAwait(false);
@@ -182,7 +189,7 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
             if (value is not null || culture.Name.Equals(_options.FallbackCulture, StringComparison.OrdinalIgnoreCase))
             {
                 EnsureAvailable(culture);
-                return value;
+                return value ?? default;
             }
         }
         finally { _catalogLock.ExitReadLock(); }
@@ -192,29 +199,34 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
         try
         {
             EnsureAvailable(culture);
-            return FindTemplate(key, culture) ?? FindTemplate(key, fallback);
+            return FindTemplate(key, culture) ?? FindTemplate(key, fallback) ?? default;
         }
         finally { _catalogLock.ExitReadLock(); }
     }
 
     /// <inheritdoc />
-    public string? GetTemplate(string key, CultureInfo culture)
+    public string? GetTemplate(string key, CultureInfo culture) => GetTemplateResult(key, culture).Template;
+
+    (string? Template, CultureInfo? Culture) ITranslationStoreWithCulture.GetTemplateWithCulture(string key, CultureInfo culture) =>
+        GetTemplateResult(key, culture);
+
+    private (string? Template, CultureInfo? Culture) GetTemplateResult(string key, CultureInfo culture)
     {
         _catalogLock.EnterReadLock();
         try
         {
             EnsureLoaded(culture);
             var value = FindTemplate(key, culture);
-            if (value is not null) return value;
+            if (value is { } result) return result;
             if (culture.Name.Equals(_options.FallbackCulture, StringComparison.OrdinalIgnoreCase))
             {
                 EnsureAvailable(culture);
-                return null;
+                return default;
             }
             var fallback = CultureInfo.GetCultureInfo(_options.FallbackCulture);
             EnsureLoaded(fallback);
             EnsureAvailable(culture);
-            return FindTemplate(key, fallback);
+            return FindTemplate(key, fallback) ?? default;
         }
         finally { _catalogLock.ExitReadLock(); }
     }
@@ -397,7 +409,7 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
             .Where(candidate => manifest.FileSet.Contains(candidate.Path))];
     }
 
-    private string? FindTemplate(string key, CultureInfo culture)
+    private (string Template, CultureInfo Culture)? FindTemplate(string key, CultureInfo culture)
     {
         if (!_cultures.TryGetValue(culture.Name, out var state)) return null;
         var documents = Volatile.Read(ref state.Documents);
@@ -407,7 +419,7 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
             if (!documents.TryGetValue(candidate.Path, out var root)) continue;
             if (JsonStoreCore.TryGetValue(root.Root, key, candidate.IsNamespaceFile, out var value))
             {
-                return value;
+                return (value, CultureInfo.GetCultureInfo(candidate.CultureName));
             }
         }
         return null;

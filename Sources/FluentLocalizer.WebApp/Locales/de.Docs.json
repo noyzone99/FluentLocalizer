@@ -295,7 +295,7 @@
       "AsyncFlow": "Die aktuellen Kulturen gehören zum Ausführungskontext: In modernem .NET werden sie über `await`, `Task.Run` und anderen Task-basierten Code hinweg weitergegeben, sodass eine asynchrone Methode die Kultur des Codes behält, der sie aufgerufen hat.",
       "FallbackTitle": "Wenn eine Sprache fehlt",
       "Fallback1": "Die Vorlage zu wählen, wenn die angefragte Sprache nicht verfügbar ist, ist Aufgabe des Stores. Die JSON-Stores suchen zum Beispiel nach `it-CH`, dann nach `it` und dann nach ihrer `FallbackCulture`, Schlüssel für Schlüssel: [JSON-Stores](docs/store-json/v1#fallback) beschreibt die genauen Regeln. Ein eigener Store wendet die Regeln an, die du schreibst.",
-      "Fallback2": "Auch wenn die Vorlage aus der Fallback-Sprache stammt, wird sie mit der Kultur der Anfrage formatiert. Eine englische Vorlage, die für eine deutsche Anfrage geliefert wird, gibt `1.234,5` statt `1,234.5` aus, und ihr `plural`-Block verwendet die deutschen Pluralregeln: Behalte in jeder Vorlage den `other`-Zweig, damit jede Sprache einen Treffer findet."
+      "Fallback2": "Ab Core 1.2.0 und Store.Json 1.3.0 folgen Zahlen und Datumsangaben der angeforderten Kultur. Die Plural- und Ordinalregeln richten sich nach der Kultur des Katalogs. Eine englische Ersatzvorlage für eine russische Anfrage liefert `21 items` und behält das russische Zahlen- und Datumsformat bei. Eigene Stores können die Kultur des Katalogs über `ITranslationStoreWithCulture` angeben."
     },
     "Errors": {
       "Nav": "Fehlende Schlüssel und Fehler",

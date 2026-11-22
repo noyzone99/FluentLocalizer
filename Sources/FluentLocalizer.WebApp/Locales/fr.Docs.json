@@ -295,7 +295,7 @@
       "AsyncFlow": "Les cultures actuelles font partie du contexte d’exécution : sur .NET moderne, elles traversent `await`, `Task.Run` et le reste du code basé sur les tâches, si bien qu’une méthode asynchrone conserve la culture du code qui l’a appelée.",
       "FallbackTitle": "Quand une langue manque",
       "Fallback1": "Choisir le modèle quand la langue demandée n’est pas disponible, c’est le travail du store. Les stores JSON, par exemple, cherchent `it-CH`, puis `it`, puis leur `FallbackCulture`, clé par clé : [Stores JSON](docs/store-json/v1#fallback) décrit les règles exactes. Un store personnalisé applique les règles que vous écrivez.",
-      "Fallback2": "Même quand le modèle provient de la langue de repli, il est formaté avec la culture de la requête. Un modèle anglais servi à une requête en allemand affiche `1.234,5` au lieu de `1,234.5`, et son bloc `plural` utilise les règles de pluriel de l’allemand : gardez la branche `other` dans chaque modèle pour que toutes les langues trouvent une correspondance."
+      "Fallback2": "Depuis Core 1.2.0 et Store.Json 1.3.0, les nombres et les dates suivent la culture demandée, et les règles de pluriel et d’ordinal suivent la culture du catalogue. Un modèle de repli en anglais pour une requête en russe affiche `21 items` et conserve le format russe pour les nombres et les dates. Les stores personnalisés peuvent indiquer la culture du catalogue via `ITranslationStoreWithCulture`."
     },
     "Errors": {
       "Nav": "Clés manquantes et erreurs",

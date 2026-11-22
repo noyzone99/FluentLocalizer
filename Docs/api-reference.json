@@ -54,6 +54,11 @@
               "Text": "The website homepage shows each package's release version instead of displaying the Core version for every package. Preserved the inherited DI scope factory during trimming so the playground opens in optimized WebAssembly builds."
             }
           ]
+        },
+        {
+          "Version": "1.2.0",
+          "SourceRevision": "core-v1.2.0",
+          "Summary": "Catalog-aware plural and ordinal rules and fixes to translation resolution."
         }
       ]
     },
@@ -118,6 +123,11 @@
               "Text": "Updated the Core dependency to FluentLocalizer 1.1.0 and System.Text.Json for .NET Standard 2.0 to 10.0.15. Modern .NET targets keep using their runtime's JSON implementation."
             }
           ]
+        },
+        {
+          "Version": "1.3.0",
+          "SourceRevision": "store-json-v1.3.0",
+          "Summary": "Catalog-culture reporting and fixes to JSON lookup, validation and refresh."
         }
       ]
     }
@@ -185,7 +195,7 @@
         {"Signature": "TranslationBuilder Genderize(Gender gender)", "Description": "Sets the gender argument to the lowercase enum name (unspecified, male, female or neuter). Equivalent to WithArg with that string; select expressions choose the template branch."},
         {"Signature": "TranslationBuilder WithCase(LetterCase letterCase)", "Description": "Selects a text transformation applied after formatting. Default is AsIs. Upper and Lower use invariant casing; the other transformations split words before recombining them."},
         {"Signature": "string Resolve()", "Description": "Synchronously retrieves and formats the template. Returns a message or the configured fallback. Null, empty, whitespace templates and KeyNotFoundException are treated as missing translations. Missing-key or formatting policies may throw; other store errors propagate. HTTP stores require preloading for synchronous lookup."},
-        {"Signature": "Task<string> ResolveAsync(CancellationToken cancellationToken = default)", "Description": "Asynchronously retrieves the template using cancellationToken, then formats it with the builder's captured culture. Returns the message or configured fallback. Resolution policies match Resolve(); store failures and cancellation propagate."},
+        {"Signature": "Task<string> ResolveAsync(CancellationToken cancellationToken = default)", "Description": "Asynchronously retrieves the template using cancellationToken. The requested culture formats numbers and dates. Stores implementing ITranslationStoreWithCulture can supply the culture for plural and ordinal rules. Resolution policies match Resolve(). Store failures and cancellation propagate."},
         {"Signature": "string ToString()", "Description": "Overrides ToString by calling Resolve(). Performs a synchronous lookup each time and has the same fallback and exception behavior."},
         {"Signature": "static implicit operator string(TranslationBuilder builder)", "Description": "Converts builder to a string by calling Resolve(). Supports assignments such as string message = translator.Get(\"Welcome\"); performs synchronous resolution."}
       ],
@@ -235,7 +245,7 @@
       "Since": "0.0.1",
       "Source": "Sources/FluentLocalizer.Core/Interfaces/ITranslationStore.cs",
       "Summary": "Storage contract returning raw templates before formatting.",
-      "Remarks": "Implementations own their fallback rules. A null result or KeyNotFoundException is treated as a missing translation by TranslationBuilder. Other failures propagate.",
+      "Remarks": "Implementations own their fallback rules and can report the catalog culture through ITranslationStoreWithCulture. A null result or KeyNotFoundException from the store is treated as a missing translation by TranslationBuilder. Other failures propagate.",
       "Members": [
         {"Signature": "string? GetTemplate(string key, CultureInfo culture)", "Description": "key identifies the template; culture selects the translation. Returns the unformatted template or null. Must complete synchronously; cannot rely on asynchronous loading."},
         {"Signature": "Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)", "Description": "Asynchronous counterpart returning the raw template or null. cancellationToken allows stores performing asynchronous I/O to cancel the operation."}
@@ -245,6 +255,21 @@
       ],
       "Changes": [
         {"Version": "0.1.0-alpha", "Description": "Namespace moved from FluentLocalizer.Core to FluentLocalizer; update using directives and references to fully qualified types."}
+      ]
+    },
+    {
+      "Name": "ITranslationStoreWithCulture",
+      "Namespace": "FluentLocalizer",
+      "Package": "FluentLocalizer",
+      "Kind": "interface",
+      "BaseTypes": ["ITranslationStore"],
+      "Since": "1.2.0",
+      "Source": "Sources/FluentLocalizer.Core/Interfaces/ITranslationStoreWithCulture.cs",
+      "Summary": "Optional storage contract that returns the culture of the catalog alongside its template.",
+      "Remarks": "The catalog culture supplies ICU plural and ordinal rules. Numbers and dates keep the requested culture. Existing ITranslationStore implementations continue to use the requested culture for both.",
+      "Members": [
+        {"Signature": "ValueTuple<string?, CultureInfo?> GetTemplateWithCulture(string key, CultureInfo culture)", "Description": "Returns (Template, Culture) from a synchronous lookup. A null template is a miss. A null catalog culture uses the requested culture."},
+        {"Signature": "Task<ValueTuple<string?, CultureInfo?>> GetTemplateWithCultureAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)", "Description": "Returns (Template, Culture) from an asynchronous lookup. cancellationToken is forwarded to the store. A null template is a miss. A null catalog culture uses the requested culture."}
       ]
     },
     {
@@ -483,7 +508,7 @@
       "Namespace": "FluentLocalizer.Store.Json",
       "Package": "FluentLocalizer.Store.Json",
       "Kind": "sealed class",
-      "BaseTypes": ["JsonTranslationStoreBase", "IDisposable"],
+      "BaseTypes": ["JsonTranslationStoreBase", "ITranslationStoreWithCulture", "IDisposable"],
       "Since": "0.1.0-alpha",
       "Source": "Sources/FluentLocalizer.Store.Json/JsonFileStore.cs",
       "Summary": "Filesystem JSON store implementing ITranslationStore and IDisposable, inheriting JsonTranslationStoreBase.",
@@ -493,6 +518,9 @@
         {"Signature": "override string? GetTemplate(string key, CultureInfo culture)", "Description": "Loads needed files on demand and returns the raw template or null. Supports nested keys and namespace-qualified keys such as common:Home:Welcome, requested/neutral/fallback cultures and file mappings. I/O and JSON errors are skipped unless ThrowOnMissingStore is true. Always throws InvalidDataException for a file larger than MaxDocumentBytes, SecurityException for symbolic links or paths outside ResourcesPath, and FileNotFoundException when only a sibling regional catalog exists."},
         {"Signature": "Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)", "Description": "Inherited from JsonTranslationStoreBase. Wraps synchronous GetTemplate in a completed task; cancellationToken is not inspected."},
         {"Signature": "void Dispose()", "Description": "Disposes the optional filesystem watcher. Use a using statement for stores owned by the application."}
+      ],
+      "EarlierDefinitions": [
+        {"Before": "1.3.0", "BaseTypes": ["JsonTranslationStoreBase", "IDisposable"]}
       ]
     },
     {
@@ -500,7 +528,7 @@
       "Namespace": "FluentLocalizer.Store.Json",
       "Package": "FluentLocalizer.Store.Json",
       "Kind": "sealed class",
-      "BaseTypes": ["JsonTranslationStoreBase"],
+      "BaseTypes": ["JsonTranslationStoreBase", "ITranslationStoreWithCulture"],
       "Since": "0.1.0-alpha",
       "Source": "Sources/FluentLocalizer.Store.Json/EmbeddedJsonStore.cs",
       "Summary": "Embedded JSON store inheriting JsonTranslationStoreBase; usable in browser applications.",
@@ -509,6 +537,9 @@
         {"Signature": "EmbeddedJsonStore(EmbeddedJsonStoreOptions? options = null)", "Description": "options defaults to a new EmbeddedJsonStoreOptions. Loads matching embedded .json resources into memory unless LoadOnDemand is true. Throws ArgumentOutOfRangeException for a negative size limit. Missing resources throw FileNotFoundException when configured; read/parse errors are skipped when ThrowOnMissingStore is false. A resource larger than MaxDocumentBytes always throws InvalidDataException, also when LoadOnDemand is true."},
         {"Signature": "string? GetTemplate(string key, CultureInfo culture)", "Description": "Inherited from JsonTranslationStoreBase. Returns the raw nested-key template using culture fallback, or null. May throw FileNotFoundException when no candidate store exists and ThrowOnMissingStore is true."},
         {"Signature": "Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)", "Description": "Inherited from JsonTranslationStoreBase. Returns a completed task from the synchronous lookup; cancellationToken is not inspected."}
+      ],
+      "EarlierDefinitions": [
+        {"Before": "1.3.0", "BaseTypes": ["JsonTranslationStoreBase"]}
       ],
       "Changes": [
         {"Version": "1.1.0", "Description": "Reads namespace files such as it-IT.common.json, which earlier versions keyed by their last segment, common.json, so the files of different cultures replaced each other. A key with a namespace is looked for in its namespace file before the culture file. FileMappings can still use the last segment when no other file has that name."}
@@ -519,7 +550,7 @@
       "Namespace": "FluentLocalizer.Store.Json",
       "Package": "FluentLocalizer.Store.Json",
       "Kind": "sealed class",
-      "BaseTypes": ["ITranslationStore", "IDisposable"],
+      "BaseTypes": ["ITranslationStoreWithCulture", "IDisposable"],
       "Since": "0.1.0-alpha",
       "Source": "Sources/FluentLocalizer.Store.Json/HttpJsonStore.cs",
       "Summary": "HTTP JSON store implementing ITranslationStore and IDisposable, with preload, lazy loading and refresh.",
@@ -532,6 +563,9 @@
         {"Signature": "Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)", "Description": "Loads the required culture, fallback and key-specific namespace on demand, then returns the raw template or null. Null key/culture are rejected. Pass cancellationToken to cancel loading. Missing required files may throw FileNotFoundException."},
         {"Signature": "Task RefreshStoreAsync(CancellationToken cancellationToken = default)", "Description": "Revalidates the manifest and loaded cultures using ETag/Last-Modified when available, then atomically replaces cached snapshots. A failed refresh preserves the previous snapshot. Returns on completion; cancellation and HTTP/JSON failures propagate."},
         {"Signature": "void Dispose()", "Description": "Disposes the store's locks and semaphores. Does not dispose the supplied HttpClient."}
+      ],
+      "EarlierDefinitions": [
+        {"Before": "1.3.0", "BaseTypes": ["ITranslationStore", "IDisposable"]}
       ]
     },
     {
@@ -539,13 +573,13 @@
       "Namespace": "FluentLocalizer.Store.Json",
       "Package": "FluentLocalizer.Store.Json",
       "Kind": "sealed class",
-      "BaseTypes": ["ITranslationStore", "IDisposable"],
+      "BaseTypes": ["ITranslationStoreWithCulture", "IDisposable"],
       "Since": "0.0.1",
       "DeprecatedIn": "0.1.0-alpha",
       "ReplacedBy": ["JsonFileStore", "EmbeddedJsonStore"],
       "Source": "Sources/FluentLocalizer.Store.Json/JsonStore.cs",
       "Summary": "Deprecated compatibility wrapper for the original mode-based store.",
-      "Remarks": "The wrapper forwards to the selected store. It copies fallback, mappings, resource and reload settings, but currently does not copy MaxDocumentBytes.",
+      "Remarks": "The wrapper forwards lookups to the selected store and copies fallback, mappings, resource, reload and document size settings.",
       "Members": [
         {"Signature": "JsonStore(JsonStoreOptions? options = null)", "Description": "Creates a wrapper using options or new JsonStoreOptions. SearchMode selects filesystem or embedded resources. Unsupported enum values throw InvalidOperationException; filesystem mode is unsupported in browsers."},
         {"Signature": "string? GetTemplate(string key, CultureInfo culture)", "Description": "Forwards key and culture to the selected store. Returns its raw template or null; propagates its errors."},
@@ -553,7 +587,8 @@
         {"Signature": "void Dispose()", "Description": "Disposes the underlying filesystem store's watcher when filesystem mode is selected."}
       ],
       "EarlierDefinitions": [
-        {"Before": "0.1.0-alpha", "Summary": "Original JSON store supporting filesystem and embedded-resource modes.", "Remarks": "Loads catalogs eagerly during construction. There are no dedicated JSON stores, namespace catalogs, size limits or HTTP APIs in this release.", "Members": [{"Signature": "JsonStore(JsonStoreOptions? options = null)", "Description": "Loads all JSON documents eagerly from the filesystem or embedded resources using options or new JsonStoreOptions. Starts a filesystem watcher when ReloadOnChange is true. ThrowOnError controls load failures."}, {"Signature": "string? GetTemplate(string key, CultureInfo culture)", "Description": "Returns a raw template from eagerly loaded documents using exact, neutral and fallback cultures and FileMappings. Colon-separated key segments are trimmed; JSON property names are case-sensitive. Returns null for a missing key; throws FileNotFoundException when no candidate document exists and ThrowOnError is true."}, {"Signature": "Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)", "Description": "Returns Task.FromResult(GetTemplate(key, culture)); performs synchronous lookup and does not inspect cancellationToken."}, {"Signature": "void Dispose()", "Description": "Disposes the filesystem watcher, if one was created."}]}
+        {"Before": "0.1.0-alpha", "BaseTypes": ["ITranslationStore", "IDisposable"], "Summary": "Original JSON store supporting filesystem and embedded-resource modes.", "Remarks": "Loads catalogs eagerly during construction. There are no dedicated JSON stores, namespace catalogs, size limits or HTTP APIs in this release.", "Members": [{"Signature": "JsonStore(JsonStoreOptions? options = null)", "Description": "Loads all JSON documents eagerly from the filesystem or embedded resources using options or new JsonStoreOptions. Starts a filesystem watcher when ReloadOnChange is true. ThrowOnError controls load failures."}, {"Signature": "string? GetTemplate(string key, CultureInfo culture)", "Description": "Returns a raw template from eagerly loaded documents using exact, neutral and fallback cultures and FileMappings. Colon-separated key segments are trimmed; JSON property names are case-sensitive. Returns null for a missing key; throws FileNotFoundException when no candidate document exists and ThrowOnError is true."}, {"Signature": "Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)", "Description": "Returns Task.FromResult(GetTemplate(key, culture)); performs synchronous lookup and does not inspect cancellationToken."}, {"Signature": "void Dispose()", "Description": "Disposes the filesystem watcher, if one was created."}]},
+        {"Before": "1.3.0", "BaseTypes": ["ITranslationStore", "IDisposable"], "Remarks": "The wrapper forwards lookups but does not copy MaxDocumentBytes."}
       ],
       "Changes": [
         {"Version": "0.1.0-alpha", "Description": "Reimplemented as a compatibility wrapper over JsonFileStore or EmbeddedJsonStore and marked obsolete. Uses dedicated-store loading and validation; filesystem mode is rejected in browsers."}
@@ -570,7 +605,7 @@
       "ReplacedBy": ["JsonFileStoreOptions", "EmbeddedJsonStoreOptions", "HttpJsonStoreOptions"],
       "Source": "Sources/FluentLocalizer.Store.Json/JsonStoreOptions.cs",
       "Summary": "Deprecated options for JsonStore, inheriting all JsonStoreSettings properties.",
-      "Remarks": "JsonStore currently ignores inherited MaxDocumentBytes.",
+      "Remarks": "JsonStore forwards the inherited MaxDocumentBytes limit to the selected store.",
       "Members": [
         {"Signature": "JsonStoreOptions()", "Description": "Creates compatibility options with all shared defaults."},
         {"Signature": "string ResourcesPath { get; set; }", "Description": "Default: Locales. Filesystem directory or embedded-resource folder depending on SearchMode."},

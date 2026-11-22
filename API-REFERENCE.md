@@ -14,6 +14,7 @@ Signatures use C# notation; parameter names, defaults, return values and relevan
 - [TranslationBuilder](#api-translationbuilder)
 - [TranslationOptions](#api-translationoptions)
 - [ITranslationStore](#api-itranslationstore)
+- [ITranslationStoreWithCulture](#api-itranslationstorewithculture)
 - [TranslationException](#api-translationexception)
 - [Gender](#api-gender)
 - [LetterCase](#api-lettercase)
@@ -49,7 +50,7 @@ Implemented by Translator. Each Get call creates a separate mutable builder.
 | --- | --- |
 | `TranslationBuilder Get(string key)` | key is the translation identifier. Returns a new builder; Translator captures CurrentUICulture at this call. A null key throws ArgumentNullException in Translator; empty keys are forwarded to the store. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Interfaces/ITranslator.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Interfaces/ITranslator.cs)
 
 <a id="api-translator"></a>
 
@@ -66,7 +67,7 @@ The translator can be reused after a culture change. Create a new builder for ea
 | `Translator(ITranslationStore store, TranslationOptions? options = null, ITranslationLogger? logger = null)` | store supplies templates and must not be null. options defaults to a new TranslationOptions; logger defaults to no logging. Stores the supplied references. Throws ArgumentNullException for a null store. |
 | `TranslationBuilder Get(string key)` | Returns a new builder for key using the configured store, options and logger. Captures CurrentUICulture for lookup and ICU message formatting. Throws ArgumentNullException for a null key. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Translator.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Translator.cs)
 
 <a id="api-translationbuilder"></a>
 
@@ -90,11 +91,11 @@ All With*, Pluralize and Genderize methods return the same builder. Culture is c
 | `TranslationBuilder Genderize(Gender gender)` | Sets the gender argument to the lowercase enum name (unspecified, male, female or neuter). Equivalent to WithArg with that string; select expressions choose the template branch. |
 | `TranslationBuilder WithCase(LetterCase letterCase)` | Selects a text transformation applied after formatting. Default is AsIs. Upper and Lower use invariant casing; the other transformations split words before recombining them. |
 | `string Resolve()` | Synchronously retrieves and formats the template. Returns a message or the configured fallback. Null, empty, whitespace templates and KeyNotFoundException are treated as missing translations. Missing-key or formatting policies may throw; other store errors propagate. HTTP stores require preloading for synchronous lookup. |
-| `Task<string> ResolveAsync(CancellationToken cancellationToken = default)` | Asynchronously retrieves the template using cancellationToken, then formats it with the builder's captured culture. Returns the message or configured fallback. Resolution policies match Resolve(); store failures and cancellation propagate. |
+| `Task<string> ResolveAsync(CancellationToken cancellationToken = default)` | Asynchronously retrieves the template using cancellationToken. The requested culture formats numbers and dates. Stores implementing ITranslationStoreWithCulture can supply the culture for plural and ordinal rules. Resolution policies match Resolve(). Store failures and cancellation propagate. |
 | `string ToString()` | Overrides ToString by calling Resolve(). Performs a synchronous lookup each time and has the same fallback and exception behavior. |
 | `static implicit operator string(TranslationBuilder builder)` | Converts builder to a string by calling Resolve(). Supports assignments such as string message = translator.Get("Welcome"); performs synchronous resolution. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/TranslationBuilder.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/TranslationBuilder.cs)
 
 <a id="api-translationoptions"></a>
 
@@ -120,7 +121,7 @@ Fallback strings replace {key} and {0} with the key, and {culture} and {1} with 
 | `Exception CreateMissingKeyException(string key, CultureInfo? culture)` | Returns the configured factory result or a TranslationException for key and culture. Direct calls do not throw the returned exception. Rejects null, empty or whitespace keys with ArgumentException (ArgumentNullException for null on modern targets); factory failures propagate. |
 | `Exception CreateFormattingException(string key, CultureInfo? culture, Exception? innerException)` | Returns the configured factory result, or a TranslationException whose message includes innerException.Message when available. The default exception does not attach innerException as InnerException. A null factory result uses CreateMissingKeyException. Key validation and factory failures match CreateMissingKeyException. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/TranslationOptions.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/TranslationOptions.cs)
 
 <a id="api-itranslationstore"></a>
 
@@ -130,14 +131,31 @@ Kind: `interface` · Package: `FluentLocalizer` · Namespace: `FluentLocalizer` 
 
 Storage contract returning raw templates before formatting.
 
-Implementations own their fallback rules. A null result or KeyNotFoundException is treated as a missing translation by TranslationBuilder. Other failures propagate.
+Implementations own their fallback rules and can report the catalog culture through ITranslationStoreWithCulture. A null result or KeyNotFoundException from the store is treated as a missing translation by TranslationBuilder. Other failures propagate.
 
 | Member | Parameters, return value and behavior |
 | --- | --- |
 | `string? GetTemplate(string key, CultureInfo culture)` | key identifies the template; culture selects the translation. Returns the unformatted template or null. Must complete synchronously; cannot rely on asynchronous loading. |
 | `Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)` | Asynchronous counterpart returning the raw template or null. cancellationToken allows stores performing asynchronous I/O to cancel the operation. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Interfaces/ITranslationStore.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Interfaces/ITranslationStore.cs)
+
+<a id="api-itranslationstorewithculture"></a>
+
+## ITranslationStoreWithCulture
+
+Kind: `interface` · Package: `FluentLocalizer` · Namespace: `FluentLocalizer` · Inherits: `ITranslationStore` · Since: `1.2.0`
+
+Optional storage contract that returns the culture of the catalog alongside its template.
+
+The catalog culture supplies ICU plural and ordinal rules. Numbers and dates keep the requested culture. Existing ITranslationStore implementations continue to use the requested culture for both.
+
+| Member | Parameters, return value and behavior |
+| --- | --- |
+| `ValueTuple<string?, CultureInfo?> GetTemplateWithCulture(string key, CultureInfo culture)` | Returns (Template, Culture) from a synchronous lookup. A null template is a miss. A null catalog culture uses the requested culture. |
+| `Task<ValueTuple<string?, CultureInfo?>> GetTemplateWithCultureAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)` | Returns (Template, Culture) from an asynchronous lookup. cancellationToken is forwarded to the store. A null template is a miss. A null catalog culture uses the requested culture. |
+
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Interfaces/ITranslationStoreWithCulture.cs)
 
 <a id="api-translationexception"></a>
 
@@ -155,7 +173,7 @@ Standard Exception members, including Message and InnerException, are inherited 
 | `string Key { get; }` | The translation key supplied to the constructor. |
 | `CultureInfo? Culture { get; }` | The requested culture supplied to the constructor; may be null. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Exceptions/TranslationException.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Exceptions/TranslationException.cs)
 
 <a id="api-gender"></a>
 
@@ -172,7 +190,7 @@ Enum values accepted by Genderize.
 | `Female` | Supplies female to a select expression. |
 | `Neuter` | Supplies neuter to a select expression. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Enums/Gender.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Enums/Gender.cs)
 
 <a id="api-lettercase"></a>
 
@@ -192,7 +210,7 @@ Enum transformations applied after message formatting.
 | `SnakeCase` | Joins lowercase words with underscores. |
 | `KebabCase` | Joins lowercase words with hyphens. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Enums/LetterCase.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Enums/LetterCase.cs)
 
 <a id="api-missingtranslationbehavior"></a>
 
@@ -208,7 +226,7 @@ Enum controlling missing-key resolution.
 | `ThrowException` | Throws the configured missing-key exception or TranslationException. |
 | `ReturnConfiguredValue` | Returns MissingKeyFallbackValue after token replacement. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Enums/MissingTranslationBehavior.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Enums/MissingTranslationBehavior.cs)
 
 <a id="api-formattingerrorbehavior"></a>
 
@@ -223,7 +241,7 @@ Enum controlling template parsing and formatting failures.
 | `ReturnPlaceholder` | Returns FormattingErrorFallbackValue after token replacement; default behavior. |
 | `ThrowException` | Throws the configured formatting exception or TranslationException. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Enums/FormattingErrorBehavior.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Enums/FormattingErrorBehavior.cs)
 
 <a id="api-itranslationlogger"></a>
 
@@ -237,7 +255,7 @@ Optional contract for translation diagnostics.
 | --- | --- |
 | `void Log(TranslationLogLevel level, string message, Exception? exception = null)` | Writes message at level, with an optional exception. Implement this interface and pass it to Translator, or use the dependency injection logger adapter. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Logging/ITranslationLogger.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Logging/ITranslationLogger.cs)
 
 <a id="api-translationloglevel"></a>
 
@@ -256,7 +274,7 @@ Enum severity levels passed to ITranslationLogger.
 | `Error` | Failures that stop normal resolution. |
 | `Critical` | Unrecoverable failures. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Logging/TranslationLogLevel.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Logging/TranslationLogLevel.cs)
 
 <a id="api-jsonstoresettings"></a>
 
@@ -276,7 +294,7 @@ Configure options before creating the store. The store-specific options inherit 
 | `long MaxDocumentBytes { get; set; }` | Default: 0 (unlimited). Positive values limit one JSON document's size in bytes. Dedicated store constructors reject negative values with ArgumentOutOfRangeException. Oversized documents always throw, whatever ThrowOnMissingStore says: InvalidDataException in file and embedded stores, HttpRequestException in HttpJsonStore. |
 | `IDictionary<string, string> FileMappings { get; }` | Mutable, initially empty, case-insensitive mapping from culture names to JSON file names. Add entries through the returned dictionary; the property cannot be replaced. File and HTTP paths are validated as relative JSON paths. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.2.0/Sources/FluentLocalizer.Store.Json/JsonStoreSettings.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.3.0/Sources/FluentLocalizer.Store.Json/JsonStoreSettings.cs)
 
 <a id="api-jsonfilestoreoptions"></a>
 
@@ -292,7 +310,7 @@ Filesystem options, inheriting FallbackCulture, ThrowOnMissingStore, MaxDocument
 | `string ResourcesPath { get; set; }` | Default: Locales. Directory scanned recursively for JSON files. Relative paths are resolved against AppContext.BaseDirectory; absolute directory paths are supported. |
 | `bool ReloadOnChange { get; set; }` | Default: false. Enables a FileSystemWatcher that invalidates cached translations when files change. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.2.0/Sources/FluentLocalizer.Store.Json/JsonFileStoreOptions.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.3.0/Sources/FluentLocalizer.Store.Json/JsonFileStoreOptions.cs)
 
 <a id="api-embeddedjsonstoreoptions"></a>
 
@@ -309,7 +327,7 @@ Embedded-resource options, inheriting all JsonStoreSettings properties.
 | `string ResourcesPath { get; set; }` | Default: Locales. Folder portion of manifest resource names used to select embedded JSON files; not a filesystem path. |
 | `bool LoadOnDemand { get; set; }` | *Since 1.1.0.* Default: false. When true, the constructor only lists the matching resources and checks MaxDocumentBytes; each file is read and parsed on the first lookup that needs it, so cultures that are never requested are not kept in memory. Invalid JSON is then reported by that lookup instead of the constructor. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.2.0/Sources/FluentLocalizer.Store.Json/EmbeddedJsonStoreOptions.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.3.0/Sources/FluentLocalizer.Store.Json/EmbeddedJsonStoreOptions.cs)
 
 <a id="api-httpjsonstoreoptions"></a>
 
@@ -324,7 +342,7 @@ HTTP options, inheriting all JsonStoreSettings properties.
 | `HttpJsonStoreOptions()` | Creates HTTP options with all shared defaults. |
 | `string ResourcesPath { get; set; }` | Default: locales. Relative URL path under HttpClient.BaseAddress serving JSON catalogs and the optional manifest.json. Absolute URLs, traversal and query/fragment components are rejected. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.2.0/Sources/FluentLocalizer.Store.Json/HttpJsonStoreOptions.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.3.0/Sources/FluentLocalizer.Store.Json/HttpJsonStoreOptions.cs)
 
 <a id="api-jsontranslationstorebase"></a>
 
@@ -341,13 +359,13 @@ Inherited by JsonFileStore and EmbeddedJsonStore. Its constructor JsonTranslatio
 | `virtual string? GetTemplate(string key, CultureInfo culture)` | Returns a raw template from cached documents using nested colon-separated key and culture fallback, or null for a missing key. Throws FileNotFoundException when no candidate store exists and ThrowOnMissingStore is true. |
 | `virtual Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)` | Returns Task.FromResult(GetTemplate(key, culture)). File and embedded stores inherit this synchronous implementation; it performs no asynchronous I/O and does not inspect cancellationToken. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.2.0/Sources/FluentLocalizer.Store.Json/JsonTranslationStoreBase.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.3.0/Sources/FluentLocalizer.Store.Json/JsonTranslationStoreBase.cs)
 
 <a id="api-jsonfilestore"></a>
 
 ## JsonFileStore
 
-Kind: `sealed class` · Package: `FluentLocalizer.Store.Json` · Namespace: `FluentLocalizer.Store.Json` · Inherits: `JsonTranslationStoreBase`, `IDisposable` · Since: `0.1.0-alpha`
+Kind: `sealed class` · Package: `FluentLocalizer.Store.Json` · Namespace: `FluentLocalizer.Store.Json` · Inherits: `JsonTranslationStoreBase`, `ITranslationStoreWithCulture`, `IDisposable` · Since: `0.1.0-alpha`
 
 Filesystem JSON store implementing ITranslationStore and IDisposable, inheriting JsonTranslationStoreBase.
 
@@ -360,13 +378,13 @@ Supports combined culture files and namespace files, regional/neutral culture se
 | `Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)` | Inherited from JsonTranslationStoreBase. Wraps synchronous GetTemplate in a completed task; cancellationToken is not inspected. |
 | `void Dispose()` | Disposes the optional filesystem watcher. Use a using statement for stores owned by the application. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.2.0/Sources/FluentLocalizer.Store.Json/JsonFileStore.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.3.0/Sources/FluentLocalizer.Store.Json/JsonFileStore.cs)
 
 <a id="api-embeddedjsonstore"></a>
 
 ## EmbeddedJsonStore
 
-Kind: `sealed class` · Package: `FluentLocalizer.Store.Json` · Namespace: `FluentLocalizer.Store.Json` · Inherits: `JsonTranslationStoreBase` · Since: `0.1.0-alpha`
+Kind: `sealed class` · Package: `FluentLocalizer.Store.Json` · Namespace: `FluentLocalizer.Store.Json` · Inherits: `JsonTranslationStoreBase`, `ITranslationStoreWithCulture` · Since: `0.1.0-alpha`
 
 Embedded JSON store inheriting JsonTranslationStoreBase; usable in browser applications.
 
@@ -378,13 +396,13 @@ Loads matching assembly resources during construction, or on first use when Load
 | `string? GetTemplate(string key, CultureInfo culture)` | Inherited from JsonTranslationStoreBase. Returns the raw nested-key template using culture fallback, or null. May throw FileNotFoundException when no candidate store exists and ThrowOnMissingStore is true. |
 | `Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)` | Inherited from JsonTranslationStoreBase. Returns a completed task from the synchronous lookup; cancellationToken is not inspected. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.2.0/Sources/FluentLocalizer.Store.Json/EmbeddedJsonStore.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.3.0/Sources/FluentLocalizer.Store.Json/EmbeddedJsonStore.cs)
 
 <a id="api-httpjsonstore"></a>
 
 ## HttpJsonStore
 
-Kind: `sealed class` · Package: `FluentLocalizer.Store.Json` · Namespace: `FluentLocalizer.Store.Json` · Inherits: `ITranslationStore`, `IDisposable` · Since: `0.1.0-alpha`
+Kind: `sealed class` · Package: `FluentLocalizer.Store.Json` · Namespace: `FluentLocalizer.Store.Json` · Inherits: `ITranslationStoreWithCulture`, `IDisposable` · Since: `0.1.0-alpha`
 
 HTTP JSON store implementing ITranslationStore and IDisposable, with preload, lazy loading and refresh.
 
@@ -400,19 +418,19 @@ Supports an optional manifest.json for culture/namespace discovery. The caller o
 | `Task RefreshStoreAsync(CancellationToken cancellationToken = default)` | Revalidates the manifest and loaded cultures using ETag/Last-Modified when available, then atomically replaces cached snapshots. A failed refresh preserves the previous snapshot. Returns on completion; cancellation and HTTP/JSON failures propagate. |
 | `void Dispose()` | Disposes the store's locks and semaphores. Does not dispose the supplied HttpClient. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.2.0/Sources/FluentLocalizer.Store.Json/HttpJsonStore.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.3.0/Sources/FluentLocalizer.Store.Json/HttpJsonStore.cs)
 
 <a id="api-jsonstore"></a>
 
 ## JsonStore
 
-Kind: `sealed class` · Package: `FluentLocalizer.Store.Json` · Namespace: `FluentLocalizer.Store.Json` · Inherits: `ITranslationStore`, `IDisposable` · Since: `0.0.1`
+Kind: `sealed class` · Package: `FluentLocalizer.Store.Json` · Namespace: `FluentLocalizer.Store.Json` · Inherits: `ITranslationStoreWithCulture`, `IDisposable` · Since: `0.0.1`
 
 > **Deprecated in 0.1.0-alpha. Use `JsonFileStore` or `EmbeddedJsonStore` instead.**
 
 Deprecated compatibility wrapper for the original mode-based store.
 
-The wrapper forwards to the selected store. It copies fallback, mappings, resource and reload settings, but currently does not copy MaxDocumentBytes.
+The wrapper forwards lookups to the selected store and copies fallback, mappings, resource, reload and document size settings.
 
 | Member | Parameters, return value and behavior |
 | --- | --- |
@@ -421,7 +439,7 @@ The wrapper forwards to the selected store. It copies fallback, mappings, resour
 | `Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)` | Forwards to the selected store. File and embedded implementations wrap synchronous lookup and do not inspect cancellationToken. |
 | `void Dispose()` | Disposes the underlying filesystem store's watcher when filesystem mode is selected. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.2.0/Sources/FluentLocalizer.Store.Json/JsonStore.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.3.0/Sources/FluentLocalizer.Store.Json/JsonStore.cs)
 
 <a id="api-jsonstoreoptions"></a>
 
@@ -433,7 +451,7 @@ Kind: `sealed class` · Package: `FluentLocalizer.Store.Json` · Namespace: `Flu
 
 Deprecated options for JsonStore, inheriting all JsonStoreSettings properties.
 
-JsonStore currently ignores inherited MaxDocumentBytes.
+JsonStore forwards the inherited MaxDocumentBytes limit to the selected store.
 
 | Member | Parameters, return value and behavior |
 | --- | --- |
@@ -443,7 +461,7 @@ JsonStore currently ignores inherited MaxDocumentBytes.
 | `Assembly? ResourceAssembly { get; set; }` | Default: null. Assembly containing catalogs when SearchMode is EmbeddedResources. |
 | `bool ReloadOnChange { get; set; }` | Default: false. Enables file watching in FileSystem mode. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.2.0/Sources/FluentLocalizer.Store.Json/JsonStoreOptions.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.3.0/Sources/FluentLocalizer.Store.Json/JsonStoreOptions.cs)
 
 <a id="api-jsonstorelocation"></a>
 
@@ -458,7 +476,7 @@ Compatibility enum used by deprecated JsonStoreOptions.SearchMode.
 | `FileSystem` | Filesystem backend; default. Unsupported in browser applications. |
 | `EmbeddedResources` | Embedded-resource backend. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.2.0/Sources/FluentLocalizer.Store.Json/JsonStoreOptions.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/store-json-v1.3.0/Sources/FluentLocalizer.Store.Json/JsonStoreOptions.cs)
 
 <a id="api-fluentlocalizerservicecollectionextensions"></a>
 
@@ -475,7 +493,7 @@ Registers ITranslator as a singleton. Register ITranslationStore before resolvin
 | `static FluentLocalizerBuilder AddFluentLocalizer(this IServiceCollection services, Action<TranslationOptions>? configure = null)` | services is the DI collection and cannot be null (ArgumentNullException). configure optionally configures IOptions<TranslationOptions>. Returns a FluentLocalizerBuilder for store/logger registration. |
 | `static FluentLocalizerBuilder AddFluentLocalizer(this IServiceCollection services, TranslationOptions translationOptions)` | Registers the supplied translationOptions instance through IOptions and adds the translator. Returns a builder. Null services or translationOptions throw ArgumentNullException. Use a typed argument when passing null to avoid overload ambiguity. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Extensions.DependencyInjection/FluentLocalizerServiceCollectionExtensions.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Extensions.DependencyInjection/FluentLocalizerServiceCollectionExtensions.cs)
 
 <a id="api-fluentlocalizerbuilder"></a>
 
@@ -495,6 +513,6 @@ Despite its namespace, this type belongs to the dependency injection package. Wi
 | `FluentLocalizerBuilder WithStore(Func<IServiceProvider, ITranslationStore> factory)` | Registers a singleton store factory. factory receives the service provider on resolution. A null factory throws ArgumentNullException. The DI container owns disposable stores created by the factory. |
 | `FluentLocalizerBuilder WithLogger()` | Registers a singleton ITranslationLogger adapter using ILogger<Translator>. Configure Microsoft.Extensions.Logging services and providers so ILogger<Translator> can be resolved. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Extensions.DependencyInjection/FluentLocalizerBuilder.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Extensions.DependencyInjection/FluentLocalizerBuilder.cs)
 
 <!-- api-reference:end -->

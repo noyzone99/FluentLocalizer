@@ -7,7 +7,7 @@ namespace FluentLocalizer;
 /// <summary>
 /// Defines the storage contract used by the translator to retrieve templates.
 /// </summary>
-/// <remarks>Implementations may apply their own culture fallback rules. Return <see langword="null"/> when no template is available; a missing key may also be reported by throwing <see cref="KeyNotFoundException"/>, which the translator treats as a missing translation.</remarks>
+/// <remarks>Implementations may apply their own culture fallback rules and can report the source culture through <see cref="ITranslationStoreWithCulture"/>. Return <see langword="null"/> when no template is available; a missing key may also be reported by throwing <see cref="KeyNotFoundException"/>, which the translator treats as a missing translation.</remarks>
 public interface ITranslationStore
 {
     /// <summary>

@@ -295,7 +295,7 @@
       "AsyncFlow": "Las culturas actuales forman parte del contexto de ejecución: en el .NET moderno se propagan a través de `await`, `Task.Run` y el resto del código basado en tareas, así que un método asíncrono conserva la cultura del código que lo llamó.",
       "FallbackTitle": "Cuando falta un idioma",
       "Fallback1": "Elegir la plantilla cuando el idioma solicitado no está disponible es tarea del store. Los stores JSON, por ejemplo, buscan `it-CH`, luego `it` y luego su `FallbackCulture`, clave por clave: [Stores JSON](docs/store-json/v1#fallback) describe las reglas exactas. Un store personalizado aplica las reglas que tú escribas.",
-      "Fallback2": "Aunque la plantilla venga del idioma de reserva, se le da formato con la cultura de la solicitud. Una plantilla en inglés servida a una solicitud en alemán imprime `1.234,5` en lugar de `1,234.5`, y su bloque `plural` usa las reglas de plural del alemán: mantén la rama `other` en todas las plantillas para que cualquier idioma encuentre una coincidencia."
+      "Fallback2": "Desde Core 1.2.0 y Store.Json 1.3.0, los números y las fechas siguen la cultura solicitada y las reglas de plural y de ordinales siguen la cultura del catálogo. Una plantilla de reserva en inglés para una solicitud en ruso devuelve `21 items` y conserva el formato ruso de números y fechas. Los almacenes personalizados pueden indicar la cultura del catálogo mediante `ITranslationStoreWithCulture`."
     },
     "Errors": {
       "Nav": "Claves que faltan y errores",
