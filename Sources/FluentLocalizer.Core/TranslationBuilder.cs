@@ -2,6 +2,7 @@ using FluentLocalizer.Logging;
 using Jeffijoe.MessageFormat;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace FluentLocalizer;
 
@@ -18,6 +19,7 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
 {
     private const string genderDefaultKey = "gender";
     private const string quantityDefaultKey = "quantity";
+    private static readonly Regex _fallbackTokens = new(@"\{(?:(?<key>[kK][eE][yY]|0)|[cC][uU][lL][tT][uU][rR][eE]|1)\}");
 
     private readonly ITranslationStore _store = store ?? throw new ArgumentNullException(nameof(store));
     private readonly string _key = key ?? throw new ArgumentNullException(nameof(key));
@@ -243,8 +245,8 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
         return _options.MissingKeyBehavior switch
         {
             MissingTranslationBehavior.ThrowException => ThrowMissingTemplate(message),
-            MissingTranslationBehavior.ReturnConfiguredValue => ReturnMissingTemplateFallback(message, _options.MissingKeyFallbackValue),
-            _ => ReturnMissingTemplateFallback(message, $"[{_key}]")
+            MissingTranslationBehavior.ReturnConfiguredValue => ReturnFallback(message, ReplaceFallbackTokens(_options.MissingKeyFallbackValue)),
+            _ => ReturnFallback(message, $"[{_key}]")
         };
     }
 
@@ -260,7 +262,7 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
         return _options.FormattingErrorBehavior switch
         {
             FormattingErrorBehavior.ThrowException => ThrowFormattingException(message, exception),
-            _ => ReturnFormattingFallback(message, _options.FormattingErrorFallbackValue)
+            _ => ReturnFallback(message, ReplaceFallbackTokens(_options.FormattingErrorFallbackValue))
         };
     }
 
@@ -276,11 +278,10 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
         throw missingException;
     }
 
-    private string ReturnMissingTemplateFallback(string message, string fallbackValue)
+    private string ReturnFallback(string message, string fallbackValue)
     {
-        var resolvedValue = ReplaceFallbackTokens(fallbackValue);
-        LogWarning($"{message} Returning fallback value '{resolvedValue}'.");
-        return resolvedValue;
+        LogWarning($"{message} Returning fallback value '{fallbackValue}'.");
+        return fallbackValue;
     }
 
     private string ThrowFormattingException(string message, Exception exception)
@@ -288,13 +289,6 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
         var formattingException = _options.CreateFormattingException(_key, _culture, exception);
         LogError(message, formattingException);
         throw formattingException;
-    }
-
-    private string ReturnFormattingFallback(string message, string fallbackValue)
-    {
-        var resolvedValue = ReplaceFallbackTokens(fallbackValue);
-        LogWarning($"{message} Returning fallback value '{resolvedValue}'.");
-        return resolvedValue;
     }
 
     private void LogDebug(string message) => _logger?.Log(TranslationLogLevel.Debug, message);
@@ -308,11 +302,8 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
     /// </summary>
     /// <param name="fallbackValue">The fallback string that may contain token values.</param>
     /// <returns>A fallback string with the translation key and culture tokens resolved.</returns>
-    private string ReplaceFallbackTokens(string fallbackValue) => fallbackValue
-            .Replace("{key}", _key, StringComparison.OrdinalIgnoreCase)
-            .Replace("{culture}", _culture?.Name ?? string.Empty, StringComparison.OrdinalIgnoreCase)
-            .Replace("{0}", _key, StringComparison.OrdinalIgnoreCase)
-            .Replace("{1}", _culture?.Name ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    private string ReplaceFallbackTokens(string fallbackValue) =>
+        _fallbackTokens.Replace(fallbackValue, match => match.Groups["key"].Success ? _key : _culture.Name);
 
     /// <summary>
     /// Converts the formatted text to a string representation of the builder for implicit string conversion.
@@ -366,27 +357,9 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
         for (int index = 0; index < words.Count; index++)
         {
             var word = words[index];
-            if (string.IsNullOrWhiteSpace(word))
-            {
-                continue;
-            }
-
-            if (index == 0)
-            {
-                builder.Append(char.ToLowerInvariant(word[0]));
-                if (word.Length > 1)
-                {
-                    builder.Append(word[1..].ToLowerInvariant());
-                }
-            }
-            else
-            {
-                builder.Append(char.ToUpperInvariant(word[0]));
-                if (word.Length > 1)
-                {
-                    builder.Append(word[1..].ToLowerInvariant());
-                }
-            }
+            var first = StringInfo.GetNextTextElement(word);
+            builder.Append(index == 0 ? first.ToLowerInvariant() : first.ToUpperInvariant());
+            builder.Append(word[first.Length..].ToLowerInvariant());
         }
 
         return builder.ToString();
@@ -408,16 +381,9 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
         StringBuilder builder = new();
         foreach (var word in words)
         {
-            if (string.IsNullOrWhiteSpace(word))
-            {
-                continue;
-            }
-
-            builder.Append(char.ToUpperInvariant(word[0]));
-            if (word.Length > 1)
-            {
-                builder.Append(word[1..].ToLowerInvariant());
-            }
+            var first = StringInfo.GetNextTextElement(word);
+            builder.Append(first.ToUpperInvariant());
+            builder.Append(word[first.Length..].ToLowerInvariant());
         }
 
         return builder.ToString();
@@ -448,85 +414,69 @@ public class TranslationBuilder(ITranslationStore store, string key, Translation
     private static List<string> SplitWords(string text)
     {
         List<string> words = [];
-        StringBuilder current = new();
+        var elementStarts = StringInfo.ParseCombiningCharacters(text);
+        int wordStart = -1;
+        var previousCategory = UnicodeCategory.OtherNotAssigned;
 
-        for (int index = 0; index < text.Length; index++)
+        for (int element = 0; element < elementStarts.Length; element++)
         {
-            char currentChar = text[index];
-            if (char.IsLetterOrDigit(currentChar))
+            int index = elementStarts[element];
+            var category = CharUnicodeInfo.GetUnicodeCategory(text, index);
+            if (!IsLetter(category) && category != UnicodeCategory.DecimalDigitNumber)
             {
-                if (current.Length > 0)
+                if (wordStart >= 0)
                 {
-                    char previousChar = text[index - 1];
-                    char? nextChar = index + 1 < text.Length ? text[index + 1] : null;
-                    if (IsWordBoundary(previousChar, currentChar, nextChar))
-                    {
-                        AddWord(words, current);
-                        current.Clear();
-                    }
+                    words.Add(text[wordStart..index]);
+                    wordStart = -1;
                 }
 
-                current.Append(currentChar);
+                continue;
             }
-            else
+
+            var nextCategory = element + 1 < elementStarts.Length
+                ? CharUnicodeInfo.GetUnicodeCategory(text, elementStarts[element + 1])
+                : UnicodeCategory.OtherNotAssigned;
+            if (wordStart < 0)
             {
-                AddWord(words, current);
-                current.Clear();
+                wordStart = index;
             }
+            else if (IsWordBoundary(previousCategory, category, nextCategory))
+            {
+                words.Add(text[wordStart..index]);
+                wordStart = index;
+            }
+
+            previousCategory = category;
         }
 
-        AddWord(words, current);
+        if (wordStart >= 0)
+        {
+            words.Add(text[wordStart..]);
+        }
+
         return words;
     }
 
     /// <summary>
-    /// Determines whether the transition between two characters should be treated as a word boundary.
+    /// Determines whether the transition between two text elements should be treated as a word boundary.
     /// </summary>
-    /// <param name="previousChar">The previous character in the text.</param>
-    /// <param name="currentChar">The current character being evaluated.</param>
-    /// <param name="nextChar">The next character, if any.</param>
-    /// <returns><c>true</c> when the characters indicate a new word should start.</returns>
-    private static bool IsWordBoundary(char previousChar, char currentChar, char? nextChar)
+    /// <param name="previous">The category of the previous text element.</param>
+    /// <param name="current">The category of the current text element.</param>
+    /// <param name="next">The category of the next text element.</param>
+    /// <returns><c>true</c> when the elements indicate a new word should start.</returns>
+    private static bool IsWordBoundary(UnicodeCategory previous, UnicodeCategory current, UnicodeCategory next)
     {
-        if (!char.IsLetterOrDigit(previousChar) || !char.IsLetterOrDigit(currentChar))
-        {
-            return false;
-        }
-
-        if (char.IsLower(previousChar) && char.IsUpper(currentChar))
+        if (current == UnicodeCategory.UppercaseLetter &&
+            (previous == UnicodeCategory.LowercaseLetter ||
+             previous == UnicodeCategory.UppercaseLetter && next == UnicodeCategory.LowercaseLetter))
         {
             return true;
         }
 
-        if (char.IsUpper(previousChar) && char.IsUpper(currentChar) && nextChar.HasValue && char.IsLower(nextChar.Value))
-        {
-            return true;
-        }
-
-        if (char.IsDigit(previousChar) && char.IsLetter(currentChar))
-        {
-            return true;
-        }
-
-        if (char.IsLetter(previousChar) && char.IsDigit(currentChar))
-        {
-            return true;
-        }
-
-        return false;
+        return (previous == UnicodeCategory.DecimalDigitNumber) != (current == UnicodeCategory.DecimalDigitNumber);
     }
 
-    /// <summary>
-    /// Adds a completed word to the collection when a token boundary is detected.
-    /// </summary>
-    /// <param name="words">The words accumulated so far.</param>
-    /// <param name="current">The current character buffer for the word being assembled.</param>
-    private static void AddWord(List<string> words, StringBuilder current)
-    {
-        if (current.Length > 0)
-        {
-            words.Add(current.ToString());
-            current.Clear();
-        }
-    }
+    private static bool IsLetter(UnicodeCategory category) => category is UnicodeCategory.UppercaseLetter
+        or UnicodeCategory.LowercaseLetter or UnicodeCategory.TitlecaseLetter or UnicodeCategory.ModifierLetter
+        or UnicodeCategory.OtherLetter;
 }

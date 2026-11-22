@@ -1,5 +1,5 @@
 using System.Globalization;
-using System.Reflection;
+using System.Text;
 
 namespace FluentLocalizer.Test;
 
@@ -262,6 +262,23 @@ public class TranslationBuilderTests
         Assert.Equal(expected, result);
     }
 
+    [Theory]
+    [InlineData(LetterCase.CamelCase, "crèmeBrûlée\U0001040F")]
+    [InlineData(LetterCase.PascalCase, "CrèmeBrûlée\U0001040F")]
+    [InlineData(LetterCase.SnakeCase, "crème_brûlée_\U00010437")]
+    [InlineData(LetterCase.KebabCase, "crème-brûlée-\U00010437")]
+    public void Resolve_preserves_combining_marks_and_supplementary_letters_when_changing_case(LetterCase letterCase, string expected)
+    {
+        const string text = "Crème brûlée \U00010437";
+        var store = new TestTranslationStore();
+        store.AddTemplate("composed", text);
+        store.AddTemplate("decomposed", text.Normalize(NormalizationForm.FormD));
+        var translator = new Translator(store);
+
+        Assert.Equal(expected, translator.Get("composed").WithCase(letterCase).Resolve());
+        Assert.Equal(expected, translator.Get("decomposed").WithCase(letterCase).Resolve().Normalize());
+    }
+
     [Fact]
     public void TranslationBuilder_can_be_converted_to_string()
     {
@@ -298,21 +315,24 @@ public class TranslationBuilderTests
     }
 
     [Fact]
-    public void ReplaceFallbackTokens_replaces_key_and_culture_placeholders()
+    public void Resolve_replaces_only_the_tokens_in_the_fallback_template()
     {
-        var builder = new TranslationBuilder(
-            new TestTranslationStore(),
-            "welcome",
-            new TranslationOptions
-            {
-                MissingKeyFallbackValue = "Value {0}/{1}"
-            })
-            .WithCulture("de-DE");
+        const string key = "welcome{culture}{0}{1}";
+        const string fallback = "{KEY}/{Culture}/{0}/{1}/{Key}";
+        const string expected = $"{key}/de-DE/{key}/de-DE/{{Key}}";
+        var store = new TestTranslationStore();
+        var options = new TranslationOptions
+        {
+            MissingKeyFallbackValue = fallback,
+            FormattingErrorFallbackValue = fallback
+        };
+        var builder = new Translator(store, options).Get(key).WithCulture("de-DE");
 
-        var method = typeof(TranslationBuilder).GetMethod("ReplaceFallbackTokens", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        var result = (string)method.Invoke(builder, ["fallback {key}/{culture}"])!;
-
-        Assert.Equal("fallback welcome/de-DE", result);
+        Assert.Equal($"[{key}]", builder.Resolve());
+        options.MissingKeyBehavior = MissingTranslationBehavior.ReturnConfiguredValue;
+        Assert.Equal(expected, builder.Resolve());
+        store.AddTemplate(key, "{missing}");
+        Assert.Equal(expected, builder.Resolve());
     }
 
     [Fact]
