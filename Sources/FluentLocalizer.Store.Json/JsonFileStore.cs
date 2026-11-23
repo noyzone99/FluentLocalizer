@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text.Json;
@@ -9,7 +10,7 @@ namespace FluentLocalizer.Store.Json;
 #if NET8_0_OR_GREATER
 [UnsupportedOSPlatform("browser")]
 #endif
-public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
+public sealed class JsonFileStore : JsonTranslationStoreBase, ITranslationStoreWithCulture, IDisposable
 {
     private readonly JsonFileStoreOptions _options;
     private readonly string _path;
@@ -40,27 +41,28 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
         if (_options.ReloadOnChange) StartWatcher();
     }
 
-    private void LoadFiles()
+    private void LoadFiles(bool validate = true)
     {
         if (!Directory.Exists(_path))
         {
             Interlocked.Exchange(ref _files, new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase));
             UpdateCultureIndex();
-            if (Options.ThrowOnMissingStore) throw new FileNotFoundException($"Translation directory '{_path}' was not found.");
+            if (validate && Options.ThrowOnMissingStore) throw new FileNotFoundException($"Translation directory '{_path}' was not found.");
             return;
         }
 
         var files = Directory.GetFiles(_path, "*.json", SearchOption.AllDirectories);
-        if (files.Length == 0 && Options.ThrowOnMissingStore)
+        if (files.Length == 0 && validate && Options.ThrowOnMissingStore)
             throw new FileNotFoundException($"No translation JSON files were found in '{_path}'.");
         var indexed = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in files)
         {
             indexed[GetRelativePath(path)] = 0;
-            if (Options.ThrowOnMissingStore)
+            if (validate && Options.ThrowOnMissingStore)
             {
                 EnsureNoLinks(path);
                 using var document = JsonDocument.Parse(ReadJson(path));
+                JsonStoreCore.RequireObjectRoot(document.RootElement);
             }
         }
         Interlocked.Exchange(ref _files, indexed);
@@ -88,11 +90,11 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
     }
 
     /// <inheritdoc />
-    protected override bool HasCandidate(System.Globalization.CultureInfo culture)
+    protected override bool HasCandidate(CultureInfo culture)
     {
         var available = AvailableCultures();
         return JsonStoreCore.SelectCulture(culture, available) is not null ||
-            JsonStoreCore.SelectCulture(System.Globalization.CultureInfo.GetCultureInfo(Options.FallbackCulture), available) is not null;
+            JsonStoreCore.SelectCulture(CultureInfo.GetCultureInfo(Options.FallbackCulture), available) is not null;
     }
 
     private string[] AvailableCultures()
@@ -111,21 +113,17 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
             .Distinct(StringComparer.OrdinalIgnoreCase)]);
 
     /// <inheritdoc />
-    protected override string? FindTemplate(string key, System.Globalization.CultureInfo culture)
+    protected override string? FindTemplate(string key, CultureInfo culture) => FindTemplateWithCulture(key, culture).Template;
+
+    private protected override (string? Template, CultureInfo? Culture) FindTemplateWithCulture(string key, CultureInfo culture)
     {
         var cache = Volatile.Read(ref _documentCache);
-        var available = AvailableCultures();
-        var selected = JsonStoreCore.SelectCulture(culture, available);
-        var fallback = JsonStoreCore.SelectCulture(System.Globalization.CultureInfo.GetCultureInfo(Options.FallbackCulture), available);
-        var candidates = new List<string>();
-        if (selected is not null)
-            candidates.AddRange(JsonStoreCore.ResolveFileCandidates(System.Globalization.CultureInfo.GetCultureInfo(selected), selected, Options.FileMappings, key));
-        if (fallback?.Equals(selected, StringComparison.OrdinalIgnoreCase) == false)
-            candidates.AddRange(JsonStoreCore.ResolveFileCandidates(System.Globalization.CultureInfo.GetCultureInfo(fallback), fallback, Options.FileMappings, key));
-        foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+        var searched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var candidate in EnumerateCandidates(key, culture))
         {
-            var cacheKey = candidate.Replace('\\', '/');
-            var path = Path.GetFullPath(Path.Combine(_path, JsonStoreCore.ValidateRelativeJsonPath(candidate).Replace('/', Path.DirectorySeparatorChar)));
+            var cacheKey = candidate.Path;
+            if (!searched.Add(cacheKey)) continue;
+            var path = Path.GetFullPath(Path.Combine(_path, JsonStoreCore.ValidateRelativeJsonPath(cacheKey).Replace('/', Path.DirectorySeparatorChar)));
             if (!path.StartsWith(_path.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                 throw new System.Security.SecurityException("Translation path escapes ResourcesPath.");
             try
@@ -147,22 +145,38 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
                         if (!File.Exists(path)) continue;
                         EnsureNoLinks(path);
                         using var document = JsonDocument.Parse(ReadJson(path));
-                        root = document.RootElement.Clone();
+                        root = JsonStoreCore.RequireObjectRoot(document.RootElement).Clone();
                         slot.Root = root;
                     }
                 }
-                if (JsonStoreCore.TryGetValue(root, key, out var value)
-                    || (JsonStoreCore.IsNamespaceFile(candidate, key)
-                    && JsonStoreCore.TryGetValue(root, JsonStoreCore.GetLookupKey(key), out value)))
+                if (JsonStoreCore.TryGetValue(root, key, candidate.IsNamespaceFile, out var value))
                 {
-                    return value;
+                    return (value, CultureInfo.GetCultureInfo(candidate.CultureName));
                 }
             }
             catch (Exception ex) when (!Options.ThrowOnMissingStore && ex is IOException or JsonException or UnauthorizedAccessException)
             { }
         }
 
-        return null;
+        return default;
+    }
+
+    private IEnumerable<JsonFileCandidate> EnumerateCandidates(string key, CultureInfo culture)
+    {
+        var available = AvailableCultures();
+        var selected = JsonStoreCore.SelectCulture(culture, available);
+        if (selected is not null)
+        {
+            foreach (var candidate in JsonStoreCore.ResolveFileCandidates(CultureInfo.GetCultureInfo(selected), selected, Options.FileMappings, key))
+                yield return candidate;
+        }
+
+        var fallback = JsonStoreCore.SelectCulture(CultureInfo.GetCultureInfo(Options.FallbackCulture), available);
+        if (fallback is not null && !fallback.Equals(selected, StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var candidate in JsonStoreCore.ResolveFileCandidates(CultureInfo.GetCultureInfo(fallback), fallback, Options.FileMappings, key))
+                yield return candidate;
+        }
     }
 
     private void EnsureNoLinks(string path)
@@ -198,10 +212,18 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
     }
 
     /// <inheritdoc />
-    public override string? GetTemplate(string key, System.Globalization.CultureInfo culture)
+    public override string? GetTemplate(string key, CultureInfo culture) => GetTemplateResult(key, culture).Template;
+
+    (string? Template, CultureInfo? Culture) ITranslationStoreWithCulture.GetTemplateWithCulture(string key, CultureInfo culture) =>
+        GetTemplateResult(key, culture);
+
+    Task<(string? Template, CultureInfo? Culture)> ITranslationStoreWithCulture.GetTemplateWithCultureAsync(
+        string key, CultureInfo culture, CancellationToken cancellationToken) => Task.FromResult(GetTemplateResult(key, culture));
+
+    private (string? Template, CultureInfo? Culture) GetTemplateResult(string key, CultureInfo culture)
     {
-        var result = FindTemplate(key, culture);
-        if (result is null && Options.ThrowOnMissingStore && !HasCandidate(culture))
+        var result = FindTemplateWithCulture(key, culture);
+        if (result.Template is null && Options.ThrowOnMissingStore && !HasCandidate(culture))
             throw new FileNotFoundException($"No translation files were found for culture '{culture.Name}' or fallback '{Options.FallbackCulture}'.");
         return result;
     }
@@ -214,22 +236,60 @@ public sealed class JsonFileStore : JsonTranslationStoreBase, IDisposable
     private void StartWatcher()
     {
         Directory.CreateDirectory(_path);
-        _watcher = new FileSystemWatcher(_path, "*.json")
+        _watcher = new FileSystemWatcher(_path)
         {
-            NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.CreationTime,
+            NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.CreationTime,
             IncludeSubdirectories = true
         };
-        _watcher.Changed += (_, e) => { LoadFile(e.FullPath); InvalidateFile(e.FullPath); };
-        _watcher.Created += (_, e) => { LoadFile(e.FullPath); InvalidateFile(e.FullPath); };
-        _watcher.Renamed += (sender, e) => { Volatile.Read(ref _files).TryRemove(GetRelativePath(e.OldFullPath), out _); LoadFile(e.FullPath); UpdateCultureIndex(); InvalidateFile(e.OldFullPath); InvalidateFile(e.FullPath); };
-        _watcher.Deleted += (sender, e) => { Volatile.Read(ref _files).TryRemove(GetRelativePath(e.FullPath), out _); UpdateCultureIndex(); InvalidateFile(e.FullPath); };
-        _watcher.Error += (_, _) =>
+        _watcher.Changed += (_, e) => UpdateWatchedFile(e.FullPath);
+        _watcher.Created += (_, e) =>
         {
-            try { LoadFiles(); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
-            InvalidateCache();
+            if (Directory.Exists(e.FullPath)) RefreshWatchedIndex();
+            else UpdateWatchedFile(e.FullPath);
         };
+        _watcher.Renamed += (_, e) =>
+        {
+            if (Directory.Exists(e.FullPath) || HasIndexedDescendants(e.OldFullPath)) RefreshWatchedIndex();
+            else
+            {
+                RemoveWatchedFile(e.OldFullPath);
+                UpdateWatchedFile(e.FullPath);
+            }
+        };
+        _watcher.Deleted += (_, e) =>
+        {
+            if (HasIndexedDescendants(e.FullPath)) RefreshWatchedIndex();
+            else RemoveWatchedFile(e.FullPath);
+        };
+        _watcher.Error += (_, _) => RefreshWatchedIndex();
         _watcher.EnableRaisingEvents = true;
+    }
+
+    private void UpdateWatchedFile(string path)
+    {
+        if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) || Directory.Exists(path)) return;
+        LoadFile(path);
+        InvalidateFile(path);
+    }
+
+    private void RemoveWatchedFile(string path)
+    {
+        if (!path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return;
+        if (Volatile.Read(ref _files).TryRemove(GetRelativePath(path), out _)) UpdateCultureIndex();
+        InvalidateFile(path);
+    }
+
+    private bool HasIndexedDescendants(string path)
+    {
+        var prefix = GetRelativePath(path) + "/";
+        return Volatile.Read(ref _files).Keys.Any(file => file.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void RefreshWatchedIndex()
+    {
+        try { LoadFiles(validate: false); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        InvalidateCache();
     }
 
     /// <inheritdoc />

@@ -4,7 +4,7 @@ All samples target .NET 11 and require the .NET 11 SDK.
 
 ## API reference
 
-For all public types, constructors, method overloads, options and enum values, see the [complete API reference](../API-REFERENCE.md) or the searchable WebUI reference for [Core](https://berik-99.github.io/FluentLocalizer/docs/core/api) and the [JSON store](https://berik-99.github.io/FluentLocalizer/docs/store-json/api). The examples below demonstrate how these APIs work together.
+For all public types, constructors, method overloads, options and enum values, see the [complete API reference](../API-REFERENCE.md) or the searchable WebUI reference for [Core](https://noyzone99.github.io/FluentLocalizer/docs/core/api) and the [JSON store](https://noyzone99.github.io/FluentLocalizer/docs/store-json/api). The examples below demonstrate how these APIs work together.
 
 | Project | Store | Basic use | Advanced use |
 |---|---|---|---|
@@ -53,6 +53,6 @@ Run the Blazor server project with:
 dotnet run --project Examples/FluentLocalizer.Samples.BlazorWebApp/FluentLocalizer.Samples.BlazorWebApp
 ```
 
-In the worker, edit `Locales/it-IT.common.json` in the build output while it runs to see live reload. In Blazor, `wwwroot/locales/manifest.json` lists the catalogs and namespace files preloaded at startup; click **Load namespace asynchronously** to fetch a separate `*.common.json` file. The refresh button requests the loaded files again from the server. The locale-resolution buttons show manifest selection in both directions: requesting `en-US` finds `en.json`, while requesting `en` finds `en-US.json`. Each case uses a separate manifest so only the intended catalog is available.
+In the worker, edit `Locales/it-IT.common.json` in the build output while it runs to see live reload. Blazor preloads the English and Italian base catalogs from `wwwroot/locales` at startup. Click **Load namespace asynchronously** to fetch the current language's `*.common.json` file on first use. The refresh button requests the loaded files again from the server. The locale-resolution buttons show manifest selection in both directions: requesting `en-US` finds `en.json`, while requesting `en` finds `en-US.json`. Each case uses a separate manifest so only the intended catalog is available.
 
 None of the samples repeats `WithCulture(...)` on its requests. The console and worker set the UI culture to `it-IT` at startup; the Blazor language selector sets the UI culture and rerenders, so every new request follows it. The only explicit culture is the console's forced German request, which demonstrates the fallback to English. For how the worker's `it-IT.json` and `it-IT.common.json` files relate, see [Organizing JSON files](../Sources/FluentLocalizer.Store.Json/Assets/README.md#organizing-json-files).

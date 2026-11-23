@@ -57,7 +57,7 @@
       "TemplateTerm": "Template",
       "TemplateText": "A message’s text, with placeholders for changing values and rules for plurals and variants. For example: `You have '{quantity, plural, one{# message} other{# messages}}'`. The [ICU message syntax](docs/core/v1/templates) lets you define these rules in the template.",
       "CultureTerm": "Culture",
-      "CultureText": "The language and local conventions represented by `CultureInfo`. A .NET culture name can identify a language, such as `it`, or include a country or region, such as `it-CH`. It determines template selection and the formatting rules for numbers, dates and plurals.",
+      "CultureText": "The language and local conventions represented by `CultureInfo`. A .NET culture name can identify a language, such as `it`, or include a country or region, such as `it-CH`. The requested culture guides template lookup and the formatting of numbers and dates.",
       "StoreTerm": "Store",
       "StoreText": "The component that retrieves templates from your translation source: JSON files, embedded resources, a web server or a database. Each store implements `ITranslationStore`, so you can change sources while keeping the same translation API.",
       "TranslatorTerm": "Translator",
@@ -67,7 +67,7 @@
       "Flow1": "`translator.Get(key)` creates a `TranslationBuilder` and captures `CultureInfo.CurrentUICulture`. The request retains that culture.",
       "Flow2": "You add the values the template needs with `WithArg`, `Pluralize` or `Genderize`. Optionally you choose a letter case with `WithCase`, or force another culture with `WithCulture`.",
       "Flow3": "`Resolve()` (or `ResolveAsync()`) asks the store for the template of that key in that culture. The store applies its own fallback rules: a JSON store, for example, looks for `it-CH`, then for `it`, then for your fallback language.",
-      "Flow4": "[MessageFormat](https://github.com/jeffijoe/messageformat.net), Jeff Hansen’s open-source ICU implementation for .NET, formats the template using the supplied arguments and the requested culture’s plural, number and date rules.",
+      "Flow4": "[MessageFormat](https://github.com/jeffijoe/messageformat.net), Jeff Hansen’s open-source ICU implementation for .NET, formats the template with the supplied arguments. Numbers and dates follow the requested culture. Plural and ordinal rules use the culture reported by the store, or the requested culture if the store does not report one.",
       "Flow5": "If the key does not exist or the template contains a mistake, `TranslationOptions` decide what you get back: a visible placeholder such as `[Inbox:Unread]`, a text of your choice, or an exception. See [Missing keys and errors](docs/core/v1/errors).",
       "PackagesTitle": "Packages",
       "PackagesIntro": "FluentLocalizer is split into three NuGet packages, so an application only references what it uses:",
@@ -118,7 +118,7 @@
       "Code1": "Replace the content of `Program.cs` with:",
       "Code2": "`JsonFileStore` reads the catalogs. `FallbackCulture = \"en\"` names the language used when the requested one has no file or no translation for a key.",
       "Code3": "`Translator` combines the store with the default options. Create it once and reuse it for the whole application.",
-      "Code4": "`CultureInfo.CurrentUICulture` is the language of the user interface. Every request created afterwards uses it, both to choose the catalog and to format numbers and plurals.",
+      "Code4": "`CultureInfo.CurrentUICulture` is the language of the user interface. Every request created afterwards uses it to look up the template and format numbers and dates.",
       "Code5": "`Get(key)` starts a request, `WithArg` fills `'{name}'`, `Pluralize(3)` gives the number to the `plural` block, and `Resolve()` returns the finished text.",
       "RunTitle": "5. Run it",
       "Run1": "The program prints the Italian messages. The culture is `it-IT`, Italian as used in Italy: there is no `it-IT.json`, so the store uses `it.json`, which serves every Italian variant.",
@@ -144,7 +144,7 @@
       "PlaceholderValues": "Values can be of any type. A plain placeholder converts them to text with the culture of the request: `1234.5` becomes `1234,5` in Italian and a `DateTime` uses that culture's date and time format. Plain placeholders do not add thousands separators: use `number` for that (see below).",
       "PlaceholderSpaces": "Spaces inside the braces are allowed: `'{ name }'` works like `'{name}'`.",
       "PluralTitle": "Plural",
-      "Plural1": "Plural rules vary by language. A `plural` block chooses the text using the supplied number and the rules of the request’s culture:",
+      "Plural1": "Plural rules vary by language. A `plural` block chooses the text using the supplied number and the rules of the catalog culture, when the store provides it. Otherwise it uses the requested culture.",
       "Plural2": "The block starts with the name of the argument that holds the number (`quantity`), then the keyword `plural`, then a list of branches. Each branch is a selector followed by text in braces:",
       "Branch": "Branch",
       "Meaning": "Meaning",
@@ -271,7 +271,7 @@
       "Basics2": "Every thread of a .NET application has two current cultures:",
       "UiCulture": "`CultureInfo.CurrentUICulture`, the language of the user interface. .NET uses it to choose resources, and FluentLocalizer uses it for translations.",
       "FormatCulture": "`CultureInfo.CurrentCulture`, the conventions for formatting. .NET uses it in `ToString()`, `string.Format` and string interpolation.",
-      "Basics3": "FluentLocalizer reads only `CurrentUICulture`, and uses it for both jobs inside a template: choosing the template and formatting numbers, dates and plurals. To keep the rest of your application consistent, set both cultures to the same value.",
+      "Basics3": "FluentLocalizer uses `CurrentUICulture` as the default request culture for template lookup and for formatting numbers and dates. To keep the rest of your application consistent, set both cultures to the same value.",
       "DefaultTitle": "The default: the UI culture",
       "Default1": "You normally never pass a culture to FluentLocalizer. Set `CurrentUICulture` where your application decides the user's language, and every request follows it:",
       "Default2": "The culture is read once, when `Get(key)` creates the request, and kept by that request. A request created before a language change keeps the old language:",
@@ -295,7 +295,7 @@
       "AsyncFlow": "The current cultures are part of the execution context: on modern .NET they flow across `await`, `Task.Run` and other task-based code, so an asynchronous method keeps the culture of the code that called it.",
       "FallbackTitle": "When a language is missing",
       "Fallback1": "Choosing the template when the requested language is not available is the store's job. The JSON stores, for example, look for `it-CH`, then for `it`, then for their `FallbackCulture`, one key at a time: [JSON stores](docs/store-json/v1#fallback) describes the exact rules. A custom store applies the rules you write.",
-      "Fallback2": "Even when the template comes from the fallback language, it is formatted with the culture of the request. An English template served to a German request prints `1.234,5` instead of `1,234.5`, and its `plural` block uses the German plural rules: keep the `other` branch in every template so any language finds a match."
+      "Fallback2": "With Core 1.2.0 and Store.Json 1.3.0, numbers and dates follow the requested culture and plural and ordinal rules follow the culture of the catalog. An English fallback template for a Russian request prints `21 items` and keeps Russian number and date formatting. Custom stores can provide the catalog culture through `ITranslationStoreWithCulture`."
     },
     "Errors": {
       "Nav": "Missing keys and errors",
@@ -547,7 +547,7 @@
       "InjectionTitle": "Dependency injection",
       "Injection": "`AddFluentLocalizer(services, options)` now really registers the options object you pass, and both overloads validate their arguments against `null`. `WithStore(store)` no longer registers the store twice. No code change is needed, but behavior that relied on the old registrations may differ.",
       "ReferenceTitle": "Keeping up to date",
-      "Reference1": "The [changelog](changelog?scope=core) lists the changes of every Core release. Use the [API reference](docs/core/v1/api) to look up public signatures and deprecated members with their replacements. Each package's README on [GitHub](https://github.com/berik-99/FluentLocalizer) contains its API reference."
+      "Reference1": "The [changelog](changelog?scope=core) lists the changes of every Core release. Use the [API reference](docs/core/v1/api) to look up public signatures and deprecated members with their replacements. Each package's README on [GitHub](https://github.com/noyzone99/FluentLocalizer) contains its API reference."
     }
   },
   "StoreJsonV1": {
@@ -629,7 +629,7 @@
       "MappingsKeys": "Keys are culture names, compared without regard to case.",
       "MappingsValues": "For `JsonFileStore` and `HttpJsonStore`, values are relative paths of `.json` files inside the store's folder or URL path. Absolute paths, `..`, `.` and empty segments, `:`, `?` and `#` are rejected with `ArgumentException` when the store is created (by `HttpJsonStore` also `%`). For `EmbeddedJsonStore` the value is the final file name alone, such as `it-IT.json`, because embedded files are identified by that name.",
       "MappingsFirst": "The mapped file is the first file tried for that culture; the usual file names follow.",
-      "MappingsWhole": "A mapped file is read as a culture file: it must contain the namespaces as top-level objects. `JsonFileStore` and `HttpJsonStore` with a manifest consider the culture available only if the mapped file exists.",
+      "MappingsWhole": "If the mapped file name identifies a bundle for the requested namespace, the store can look up the key without its namespace prefix. `JsonFileStore` discovers the mapping’s culture when the file exists. `HttpJsonStore` with a manifest discovers it when the manifest lists the file.",
       "SettingsTitle": "Shared settings",
       "Settings1": "`JsonStoreSettings` is the base class of the three options classes. Its properties are available on every JSON store:",
       "Empty": "Empty",
@@ -829,7 +829,7 @@
       "LifetimeThreads": "Register the store itself in dependency injection as well, as in the example below, if components need to call `LoadAsync` or `RefreshStoreAsync`.",
       "ExampleTitle": "Example: Blazor WebAssembly",
       "Example1": "A complete `Program.cs` that preloads the user's language before the first render, and a component that switches language:",
-      "Example2": "Components that show text must render again after the switch: the button's own component does so after its event handler, and other components can receive the culture as a cascading value. The repository's [Blazor sample](https://github.com/berik-99/FluentLocalizer/tree/main/Examples/FluentLocalizer.Samples.BlazorWebApp) shows manifest preloading, on-demand namespaces and refresh in a running application."
+      "Example2": "Components that show text must render again after the switch: the button's own component does so after its event handler, and other components can receive the culture as a cascading value. The repository's [Blazor sample](https://github.com/noyzone99/FluentLocalizer/tree/main/Examples/FluentLocalizer.Samples.BlazorWebApp) shows manifest preloading, on-demand namespaces and refresh in a running application."
     },
     "Migration": {
       "Nav": "Migration guide",
@@ -852,7 +852,7 @@
       "DeprecatedMax": "It does not pass on `MaxDocumentBytes`: with `JsonStore` the size limit is never applied.",
       "DeprecatedBrowser": "With `SearchMode = FileSystem` (the default) it throws `PlatformNotSupportedException` in the browser, like `JsonFileStore`.",
       "ReferenceTitle": "Keeping up to date",
-      "Reference1": "The [changelog](changelog?scope=store-json) lists the changes of every JSON store release. Use the [API reference](docs/store-json/v1/api) to look up public signatures and deprecated members with their replacements. The package README on [GitHub](https://github.com/berik-99/FluentLocalizer) contains the same reference."
+      "Reference1": "The [changelog](changelog?scope=store-json) lists the changes of every JSON store release. Use the [API reference](docs/store-json/v1/api) to look up public signatures and deprecated members with their replacements. The package README on [GitHub](https://github.com/noyzone99/FluentLocalizer) contains the same reference."
     }
   }
 }

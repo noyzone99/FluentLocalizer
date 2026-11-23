@@ -7,6 +7,54 @@ namespace FluentLocalizer.Test;
 public class JsonTranslationStoreTests
 {
     [Fact]
+    public async Task Reload_does_not_cache_results_from_an_in_flight_lookup()
+    {
+        var culture = CultureInfo.GetCultureInfo("en-US");
+        using var store = new ReloadableStore();
+        store.Reload("before");
+        var pending = Task.Run(() => store.GetTemplate("Hello", culture), TestContext.Current.CancellationToken);
+
+        try
+        {
+            Assert.True(store.ReadStarted.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+            store.Reload("after");
+        }
+        finally
+        {
+            store.AllowReadToFinish.Set();
+        }
+
+        Assert.Equal("before", await pending);
+        Assert.Equal("after", store.GetTemplate("Hello", culture));
+    }
+
+    private sealed class ReloadableStore() : JsonTranslationStoreBase(new JsonStoreSettings()), IDisposable
+    {
+        public readonly ManualResetEventSlim ReadStarted = new();
+        public readonly ManualResetEventSlim AllowReadToFinish = new();
+
+        public void Reload(string greeting)
+        {
+            SetDocument("en-US.json", $$"""{"Hello":"{{greeting}}"}""");
+            ClearTemplateCache();
+        }
+
+        protected override string? FindTemplate(string key, CultureInfo culture)
+        {
+            var value = base.FindTemplate(key, culture);
+            ReadStarted.Set();
+            if (!AllowReadToFinish.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException();
+            return value;
+        }
+
+        public void Dispose()
+        {
+            ReadStarted.Dispose();
+            AllowReadToFinish.Dispose();
+        }
+    }
+
+    [Fact]
     public void GetTemplate_LoadsTranslationsFromFilesystem()
     {
         var temporaryDirectory = CreateTemporaryDirectory();

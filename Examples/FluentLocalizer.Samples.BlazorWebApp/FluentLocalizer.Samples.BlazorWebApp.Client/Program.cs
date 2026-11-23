@@ -27,7 +27,7 @@ builder.Services.AddFluentLocalizer(options =>
 
 var app = builder.Build();
 
-// Download all supported locales once when the WebAssembly client starts.
+// Preload the base locale files. Without a manifest here, namespace files load on first use.
 await store.LoadAsync(["en-US", "it-IT"]);
 
 await app.RunAsync();

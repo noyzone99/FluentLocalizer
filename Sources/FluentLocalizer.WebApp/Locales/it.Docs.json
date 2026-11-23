@@ -57,7 +57,7 @@
       "TemplateTerm": "Template",
       "TemplateText": "Il testo di un messaggio, con placeholder per i valori variabili e regole per plurali e varianti. Ad esempio: `You have '{quantity, plural, one{# message} other{# messages}}'`. La [sintassi dei messaggi ICU](docs/core/v1/templates) permette di definire queste regole nel template.",
       "CultureTerm": "Cultura",
-      "CultureText": "La combinazione di lingua e convenzioni locali rappresentata da `CultureInfo`. Il nome .NET può indicare solo la lingua, come `it`, oppure includere un paese o una regione, come `it-CH`. La cultura determina la scelta del template e le regole di formattazione di numeri, date e plurali.",
+      "CultureText": "La combinazione di lingua e convenzioni locali rappresentata da `CultureInfo`. Il nome .NET può indicare solo la lingua, come `it`, oppure includere un paese o una regione, come `it-CH`. La cultura richiesta guida la ricerca del template e la formattazione di numeri e date.",
       "StoreTerm": "Store",
       "StoreText": "Il componente che recupera i template dalla sorgente delle traduzioni: file JSON, risorse embedded, un server web o un database. Ogni store implementa `ITranslationStore`, così puoi cambiare sorgente mantenendo la stessa API di traduzione.",
       "TranslatorTerm": "Translator",
@@ -67,7 +67,7 @@
       "Flow1": "`translator.Get(key)` crea un `TranslationBuilder` e acquisisce la cultura corrente dell’interfaccia, `CultureInfo.CurrentUICulture`, che la richiesta conserverà.",
       "Flow2": "Passi gli argomenti con `WithArg`, `Pluralize` o `Genderize`. Puoi anche applicare una trasformazione di casing con `WithCase` o scegliere una cultura diversa con `WithCulture`.",
       "Flow3": "`Resolve()` (o `ResolveAsync()`) chiede allo store il template di quella chiave in quella cultura. Lo store applica le proprie regole di fallback: uno store JSON, ad esempio, cerca `it-CH`, poi `it`, poi la tua lingua di fallback.",
-      "Flow4": "[MessageFormat](https://github.com/jeffijoe/messageformat.net), l’implementazione open source di ICU per .NET di Jeff Hansen, formatta il template con gli argomenti forniti e le regole della cultura richiesta: plurali, numeri e date.",
+      "Flow4": "[MessageFormat](https://github.com/jeffijoe/messageformat.net), l’implementazione open source di ICU per .NET di Jeff Hansen, formatta il template con gli argomenti forniti. Numeri e date seguono la cultura richiesta. Per plurali e ordinali usa la cultura indicata dallo store. Se lo store non la indica, usa quella richiesta.",
       "Flow5": "Se la chiave non esiste o il template contiene un errore, sono le `TranslationOptions` a decidere cosa ottieni: un placeholder visibile come `[Inbox:Unread]`, un testo a tua scelta o un'eccezione. Vedi [Chiavi mancanti ed errori](docs/core/v1/errors).",
       "PackagesTitle": "Pacchetti",
       "PackagesIntro": "FluentLocalizer è diviso in tre pacchetti NuGet, così un'applicazione referenzia solo ciò che usa:",
@@ -118,7 +118,7 @@
       "Code1": "Sostituisci il contenuto di `Program.cs` con:",
       "Code2": "`JsonFileStore` legge i cataloghi. `FallbackCulture = \"en\"` indica la lingua usata quando quella richiesta non ha un file o non ha una traduzione per una chiave.",
       "Code3": "`Translator` combina lo store con le opzioni predefinite. Crealo una sola volta e riusalo in tutta l'applicazione.",
-      "Code4": "`CultureInfo.CurrentUICulture` indica la lingua dell’interfaccia. Le richieste create dopo averla impostata usano quella cultura per selezionare il catalogo e formattare numeri e plurali.",
+      "Code4": "`CultureInfo.CurrentUICulture` indica la lingua dell’interfaccia. Le richieste create dopo averla impostata usano quella cultura per cercare il template e formattare numeri e date.",
       "Code5": "`Get(key)` avvia una richiesta, `WithArg` riempie `'{name}'`, `Pluralize(3)` passa il numero al blocco `plural` e `Resolve()` restituisce il testo finito.",
       "RunTitle": "5. Eseguilo",
       "Run1": "Il programma stampa i messaggi in italiano. La cultura è `it-IT`, l'italiano usato in Italia: non esiste un `it-IT.json`, quindi lo store usa `it.json`, che serve tutte le varianti dell'italiano.",
@@ -144,7 +144,7 @@
       "PlaceholderValues": "I valori possono essere di qualsiasi tipo. Un placeholder semplice li converte in testo con la cultura della richiesta: `1234.5` diventa `1234,5` in italiano e un `DateTime` usa il formato di data e ora di quella cultura. I placeholder semplici non aggiungono i separatori delle migliaia: per quello usa `number` (vedi sotto).",
       "PlaceholderSpaces": "Gli spazi dentro le graffe sono consentiti: `'{ name }'` funziona come `'{name}'`.",
       "PluralTitle": "Plurale",
-      "Plural1": "Le regole del plurale cambiano da una lingua all’altra. Un blocco `plural` sceglie il testo in base al numero passato e alle regole della cultura della richiesta:",
+      "Plural1": "Le regole del plurale cambiano da una lingua all’altra. Un blocco `plural` sceglie il testo in base al numero passato e alle regole della cultura del catalogo, se lo store la indica. Altrimenti usa la cultura richiesta.",
       "Plural2": "Il blocco inizia con il nome dell'argomento che contiene il numero (`quantity`), poi la parola chiave `plural`, poi un elenco di rami. Ogni ramo è un selettore seguito da un testo tra graffe:",
       "Branch": "Ramo",
       "Meaning": "Significato",
@@ -271,7 +271,7 @@
       "Basics2": "Ogni thread di un'applicazione .NET ha due culture correnti:",
       "UiCulture": "`CultureInfo.CurrentUICulture`, la lingua dell'interfaccia utente. .NET la usa per scegliere le risorse, e FluentLocalizer la usa per le traduzioni.",
       "FormatCulture": "`CultureInfo.CurrentCulture`, le convenzioni di formattazione. .NET la usa in `ToString()`, `string.Format` e nell'interpolazione di stringhe.",
-      "Basics3": "FluentLocalizer legge solo `CurrentUICulture` e la usa per entrambi i compiti che riguardano un template: scegliere il template e formattare numeri, date e plurali. Per mantenere coerente il resto della tua applicazione, imposta entrambe le culture sullo stesso valore.",
+      "Basics3": "FluentLocalizer usa `CurrentUICulture` come cultura predefinita della richiesta per cercare il template e formattare numeri e date. Per mantenere coerente il resto della tua applicazione, imposta entrambe le culture sullo stesso valore.",
       "DefaultTitle": "Il comportamento predefinito: la cultura UI",
       "Default1": "Normalmente non passi mai una cultura a FluentLocalizer. Imposta `CurrentUICulture` nel punto in cui la tua applicazione decide la lingua dell'utente, e ogni richiesta la segue:",
       "Default2": "La cultura viene letta una sola volta, quando `Get(key)` crea la richiesta, e la richiesta la conserva. Una richiesta creata prima di un cambio di lingua mantiene la lingua precedente:",
@@ -295,7 +295,7 @@
       "AsyncFlow": "Le culture correnti fanno parte del contesto di esecuzione: su .NET moderno si propagano attraverso `await`, `Task.Run` e altro codice basato sui task, quindi un metodo asincrono mantiene la cultura del codice che lo ha chiamato.",
       "FallbackTitle": "Quando manca una lingua",
       "Fallback1": "Scegliere il template quando la lingua richiesta non è disponibile è compito dello store. Gli store JSON, ad esempio, cercano `it-CH`, poi `it`, poi la loro `FallbackCulture`, una chiave alla volta: [Store JSON](docs/store-json/v1#fallback) descrive le regole esatte. Uno store personalizzato applica le regole che scrivi tu.",
-      "Fallback2": "Anche quando il template arriva dalla lingua di fallback, viene formattato con la cultura della richiesta. Un template inglese servito a una richiesta in tedesco stampa `1.234,5` invece di `1,234.5`, e il suo blocco `plural` usa le regole del plurale tedesche: mantieni il ramo `other` in ogni template, così ogni lingua trova una corrispondenza."
+      "Fallback2": "Da Core 1.2.0 e Store.Json 1.3.0, numeri e date seguono la cultura richiesta, mentre le regole dei plurali e degli ordinali seguono la cultura del catalogo. Un template inglese usato come fallback per una richiesta in russo restituisce `21 items` e mantiene il formato russo di numeri e date. Gli store personalizzati possono fornire la cultura del catalogo con `ITranslationStoreWithCulture`."
     },
     "Errors": {
       "Nav": "Chiavi mancanti ed errori",
@@ -547,7 +547,7 @@
       "InjectionTitle": "Dependency injection",
       "Injection": "`AddFluentLocalizer(services, options)` ora registra davvero l'oggetto opzioni che passi, ed entrambi gli overload verificano che i loro argomenti non siano `null`. `WithStore(store)` non registra più lo store due volte. Non serve modificare il codice, ma un comportamento che si basava sulle vecchie registrazioni potrebbe cambiare.",
       "ReferenceTitle": "Restare aggiornati",
-      "Reference1": "Il [changelog](changelog?scope=core) elenca le modifiche di ogni rilascio Core. Consulta il [riferimento API](docs/core/v1/api) per le firme pubbliche e i membri deprecati con i relativi sostituti. Il README di ogni pacchetto su [GitHub](https://github.com/berik-99/FluentLocalizer) contiene il relativo riferimento API."
+      "Reference1": "Il [changelog](changelog?scope=core) elenca le modifiche di ogni rilascio Core. Consulta il [riferimento API](docs/core/v1/api) per le firme pubbliche e i membri deprecati con i relativi sostituti. Il README di ogni pacchetto su [GitHub](https://github.com/noyzone99/FluentLocalizer) contiene il relativo riferimento API."
     }
   },
   "StoreJsonV1": {
@@ -629,7 +629,7 @@
       "MappingsKeys": "Le chiavi sono nomi di cultura, confrontati senza distinguere maiuscole e minuscole.",
       "MappingsValues": "Per `JsonFileStore` e `HttpJsonStore`, i valori sono percorsi relativi di file `.json` all'interno della cartella o del percorso URL dello store. Percorsi assoluti, segmenti `..`, `.` e vuoti, `:`, `?` e `#` vengono rifiutati con `ArgumentException` quando lo store viene creato (da `HttpJsonStore` anche `%`). Per `EmbeddedJsonStore` il valore è solo il nome finale del file, come `it-IT.json`, perché i file embedded sono identificati da quel nome.",
       "MappingsFirst": "Il file associato è il primo file provato per quella cultura; seguono i soliti nomi di file.",
-      "MappingsWhole": "Un file associato viene letto come file della cultura: deve contenere i namespace come oggetti di primo livello. `JsonFileStore` e `HttpJsonStore` con un manifest considerano disponibile la cultura solo se il file associato esiste.",
+      "MappingsWhole": "Se il nome del file associato identifica un catalogo per il namespace richiesto, lo store può cercare la chiave senza il prefisso del namespace. `JsonFileStore` rileva la cultura dell’associazione se il file esiste. `HttpJsonStore` con un manifest la rileva se il manifest elenca il file.",
       "SettingsTitle": "Impostazioni condivise",
       "Settings1": "`JsonStoreSettings` è la classe base delle tre classi di opzioni. Le sue proprietà sono disponibili in ogni store JSON:",
       "Empty": "Vuoto",
@@ -829,7 +829,7 @@
       "LifetimeThreads": "Registra anche lo store stesso nella dependency injection, come nell'esempio qui sotto, se i componenti devono chiamare `LoadAsync` o `RefreshStoreAsync`.",
       "ExampleTitle": "Esempio: Blazor WebAssembly",
       "Example1": "Un `Program.cs` completo che precarica la lingua dell'utente prima del primo rendering, e un componente che cambia lingua:",
-      "Example2": "I componenti che mostrano testo devono essere renderizzati di nuovo dopo il cambio: il componente del pulsante lo fa da sé dopo il suo gestore di eventi, e gli altri componenti possono ricevere la cultura come cascading value. L'[esempio Blazor](https://github.com/berik-99/FluentLocalizer/tree/main/Examples/FluentLocalizer.Samples.BlazorWebApp) del repository mostra il precaricamento con manifest, i namespace caricati su richiesta e l'aggiornamento in un'applicazione in esecuzione."
+      "Example2": "I componenti che mostrano testo devono essere renderizzati di nuovo dopo il cambio: il componente del pulsante lo fa da sé dopo il suo gestore di eventi, e gli altri componenti possono ricevere la cultura come cascading value. L'[esempio Blazor](https://github.com/noyzone99/FluentLocalizer/tree/main/Examples/FluentLocalizer.Samples.BlazorWebApp) del repository mostra il precaricamento con manifest, i namespace caricati su richiesta e l'aggiornamento in un'applicazione in esecuzione."
     },
     "Migration": {
       "Nav": "Guida alla migrazione",
@@ -852,7 +852,7 @@
       "DeprecatedMax": "Non trasmette `MaxDocumentBytes`: con `JsonStore` il limite di dimensione non viene mai applicato.",
       "DeprecatedBrowser": "Con `SearchMode = FileSystem` (il valore predefinito) genera `PlatformNotSupportedException` nel browser, come `JsonFileStore`.",
       "ReferenceTitle": "Restare aggiornati",
-      "Reference1": "Il [changelog](changelog?scope=store-json) elenca le modifiche di ogni rilascio dello store JSON. Consulta il [riferimento API](docs/store-json/v1/api) per le firme pubbliche e i membri deprecati con i relativi sostituti. Il README del pacchetto su [GitHub](https://github.com/berik-99/FluentLocalizer) contiene lo stesso riferimento."
+      "Reference1": "Il [changelog](changelog?scope=store-json) elenca le modifiche di ogni rilascio dello store JSON. Consulta il [riferimento API](docs/store-json/v1/api) per le firme pubbliche e i membri deprecati con i relativi sostituti. Il README del pacchetto su [GitHub](https://github.com/noyzone99/FluentLocalizer) contiene lo stesso riferimento."
     }
   }
 }

@@ -1,3 +1,4 @@
 {
-  "Hello": "Hello from embedded resource"
+  "Hello": "Hello from embedded resource",
+  "FallbackGrammar": "{quantity, plural, one {# item} other {# items}} | {quantity, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} | {amount, number} | {date, date, short}"
 }

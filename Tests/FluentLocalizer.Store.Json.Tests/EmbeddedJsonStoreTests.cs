@@ -6,6 +6,25 @@ namespace FluentLocalizer.Test;
 
 public sealed class EmbeddedJsonStoreTests
 {
+    #if NET8_0_OR_GREATER
+    [Fact]
+    public void Candidate_cache_has_a_limit_even_with_distinct_requested_cultures()
+    {
+        var store = new EmbeddedJsonStore(Options("EmbeddedLocales/Namespaces"));
+        for (var index = 0; index < 600; index++)
+        {
+            var region = index.ToString("D3", CultureInfo.InvariantCulture);
+            Assert.Null(store.GetTemplate("Unknown", new CultureInfo($"en-{region}")));
+        }
+
+        var cache = typeof(EmbeddedJsonStore).GetField("_candidates",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(cache);
+        Assert.InRange(Assert.IsAssignableFrom<System.Collections.IDictionary>(cache.GetValue(store)).Count, 1, 512);
+        Assert.Equal("Hello", store.GetTemplate("Hello", CultureInfo.GetCultureInfo("en")));
+    }
+    #endif
+
     [Fact]
     public async Task Loads_resources_and_supports_sync_and_async_lookups()
     {
@@ -66,6 +85,7 @@ public sealed class EmbeddedJsonStoreTests
         var store = new EmbeddedJsonStore(options);
 
         Assert.Equal("Titolo", store.GetTemplate("Ui:Title", new CultureInfo("it-IT")));
+        Assert.Equal("Barra", store.GetTemplate("Ui.Toolbar:Title", new CultureInfo("it-IT")));
         Assert.Equal("Titolo", store.GetTemplate(" Ui : Title ", new CultureInfo("it")));
         Assert.Equal("Sottotitolo", store.GetTemplate("Ui:Subtitle", new CultureInfo("it-IT")));
         Assert.Equal("Italian extra", store.GetTemplate("Extra:Extra", new CultureInfo("it-IT")));
@@ -88,9 +108,10 @@ public sealed class EmbeddedJsonStoreTests
     }
 
     [Fact]
-    public void Load_on_demand_reads_a_namespace_file_only_for_its_keys()
+    public void Load_on_demand_rejects_a_non_object_namespace_when_its_keys_are_requested()
     {
         var options = Options("EmbeddedLocales/Broken");
+        options.FallbackCulture = "it";
         options.ThrowOnMissingStore = true;
         options.LoadOnDemand = true;
         var store = new EmbeddedJsonStore(options);

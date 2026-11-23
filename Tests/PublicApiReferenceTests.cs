@@ -213,16 +213,19 @@ public sealed class PublicApiReferenceTests
     private static void AssertSemVer(string version) =>
         Assert.Matches(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$", version);
 
-    // Numeric parts first; a prerelease sorts before the release with the same number.
-    private static int CompareVersions(string left, string right)
+    [Theory]
+    [InlineData("1.2.0-rc.2", "1.2.0-rc.10", -1)]
+    [InlineData("1.2.0-alpha", "1.2.0-alpha.1", -1)]
+    [InlineData("1.2.0-alpha.1", "1.2.0-alpha.beta", -1)]
+    [InlineData("1.2.0-rc.10", "1.2.0", -1)]
+    [InlineData("1.2.0+build.1", "1.2.0+build.2", 0)]
+    public void Semantic_version_order_matches_SemVer(string left, string right, int expected)
     {
-        var leftParts = left.Split(['-'], 2);
-        var rightParts = right.Split(['-'], 2);
-        var result = new Version(leftParts[0]).CompareTo(new Version(rightParts[0]));
-        if (result != 0) return result;
-        if (leftParts.Length != rightParts.Length) return leftParts.Length > rightParts.Length ? -1 : 1;
-        return leftParts.Length == 1 ? 0 : string.CompareOrdinal(leftParts[1], rightParts[1]);
+        Assert.Equal(expected, Math.Sign(CompareVersions(left, right)));
+        Assert.Equal(-expected, Math.Sign(CompareVersions(right, left)));
     }
+
+    private static int CompareVersions(string left, string right) => FluentLocalizer.Documentation.SemanticVersion.Compare(left, right);
 
     private static IEnumerable<(string Signature, MemberInfo Member)> ActualMembers(Type type, bool declaredOnly = true)
     {

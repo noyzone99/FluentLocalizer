@@ -9,7 +9,7 @@ namespace FluentLocalizer.Store.Json;
 
 /// <summary>Loads culture JSON files over HTTP and caches them for synchronous lookups after loading.</summary>
 /// <remarks>The supplied <see cref="HttpClient"/> remains owned by the caller.</remarks>
-public sealed class HttpJsonStore : ITranslationStore, IDisposable
+public sealed class HttpJsonStore : ITranslationStoreWithCulture, IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly HttpJsonStoreOptions _options;
@@ -171,7 +171,14 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
     }
 
     /// <inheritdoc />
-    public async Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)
+    public async Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default) =>
+        (await GetTemplateResultAsync(key, culture, cancellationToken).ConfigureAwait(false)).Template;
+
+    Task<(string? Template, CultureInfo? Culture)> ITranslationStoreWithCulture.GetTemplateWithCultureAsync(
+        string key, CultureInfo culture, CancellationToken cancellationToken) => GetTemplateResultAsync(key, culture, cancellationToken);
+
+    private async Task<(string? Template, CultureInfo? Culture)> GetTemplateResultAsync(
+        string key, CultureInfo culture, CancellationToken cancellationToken)
     {
         Guard.IfNull(culture);
         await LoadCultureAsync(culture, key, cancellationToken).ConfigureAwait(false);
@@ -182,7 +189,7 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
             if (value is not null || culture.Name.Equals(_options.FallbackCulture, StringComparison.OrdinalIgnoreCase))
             {
                 EnsureAvailable(culture);
-                return value;
+                return value ?? default;
             }
         }
         finally { _catalogLock.ExitReadLock(); }
@@ -192,25 +199,34 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
         try
         {
             EnsureAvailable(culture);
-            return FindTemplate(key, culture) ?? FindTemplate(key, fallback);
+            return FindTemplate(key, culture) ?? FindTemplate(key, fallback) ?? default;
         }
         finally { _catalogLock.ExitReadLock(); }
     }
 
     /// <inheritdoc />
-    public string? GetTemplate(string key, CultureInfo culture)
+    public string? GetTemplate(string key, CultureInfo culture) => GetTemplateResult(key, culture).Template;
+
+    (string? Template, CultureInfo? Culture) ITranslationStoreWithCulture.GetTemplateWithCulture(string key, CultureInfo culture) =>
+        GetTemplateResult(key, culture);
+
+    private (string? Template, CultureInfo? Culture) GetTemplateResult(string key, CultureInfo culture)
     {
         _catalogLock.EnterReadLock();
         try
         {
             EnsureLoaded(culture);
             var value = FindTemplate(key, culture);
-            if (value is not null || culture.Name.Equals(_options.FallbackCulture, StringComparison.OrdinalIgnoreCase))
-                return value;
+            if (value is { } result) return result;
+            if (culture.Name.Equals(_options.FallbackCulture, StringComparison.OrdinalIgnoreCase))
+            {
+                EnsureAvailable(culture);
+                return default;
+            }
             var fallback = CultureInfo.GetCultureInfo(_options.FallbackCulture);
             EnsureLoaded(fallback);
             EnsureAvailable(culture);
-            return FindTemplate(key, fallback);
+            return FindTemplate(key, fallback) ?? default;
         }
         finally { _catalogLock.ExitReadLock(); }
     }
@@ -218,7 +234,13 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
     private async Task LoadCultureAsync(CultureInfo culture, string? key, CancellationToken cancellationToken, bool forceRefresh = false)
     {
         await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
-        var state = _cultures.GetOrAdd(culture.Name, static _ => new CultureCache());
+        if (!_cultures.TryGetValue(culture.Name, out var state))
+        {
+            // Register before or after a refresh so the first load uses the same catalog as the other cultures.
+            await _refreshGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try { state = _cultures.GetOrAdd(culture.Name, static _ => new CultureCache()); }
+            finally { _refreshGate.Release(); }
+        }
         while (true)
         {
             await state.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -227,11 +249,12 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
                 var version = Volatile.Read(ref _catalogVersion);
                 var candidates = Candidates(culture, key);
                 var current = Volatile.Read(ref state.Documents);
-                if (!forceRefresh && current is not null && candidates.All(state.Attempted.Contains)) return;
+                if (!forceRefresh && current is not null && candidates.All(candidate => state.Attempted.Contains(candidate.Path))) return;
                 var manifest = Volatile.Read(ref _manifest);
                 var search = forceRefresh
-                    ? state.Attempted.Union(candidates, StringComparer.OrdinalIgnoreCase)
+                    ? state.Attempted.Union(candidates.Select(static candidate => candidate.Path), StringComparer.OrdinalIgnoreCase)
                         .Where(file => manifest?.FileSet.Contains(file) != false)
+                        .Select(file => new JsonFileCandidate(file, culture.Name, IsNamespaceFile: false))
                     : candidates;
 
                 var next = forceRefresh ? new Dictionary<string, CachedFile>(StringComparer.OrdinalIgnoreCase) :
@@ -239,11 +262,13 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
                     new Dictionary<string, CachedFile>(current, StringComparer.OrdinalIgnoreCase);
 
                 var attempted = new List<string>();
-                foreach (var fileName in search)
+                foreach (var candidate in search)
                 {
+                    var fileName = candidate.Path;
                     if (!forceRefresh && state.Attempted.Contains(fileName))
                     {
-                        if (key is not null && next.TryGetValue(fileName, out var cached) && HasValue(cached.Root, fileName, key)) break;
+                        if (key is not null && next.TryGetValue(fileName, out var cached) &&
+                            JsonStoreCore.TryGetValue(cached.Root, key, candidate.IsNamespaceFile, out _)) break;
                         continue;
                     }
                     attempted.Add(fileName);
@@ -268,15 +293,16 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
                     }
                     response.EnsureSuccessStatusCode();
                     if (_options.MaxDocumentBytes > 0)
-                        await response.Content.LoadIntoBufferAsync(_options.MaxDocumentBytes).ConfigureAwait(false);
+                        await response.Content.LoadIntoBufferAsync(_options.MaxDocumentBytes, cancellationToken).ConfigureAwait(false);
 #if NET8_0_OR_GREATER
                     await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 #else
                     using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 #endif
                     using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
-                    next[fileName] = new CachedFile(document.RootElement.Clone(), response.Headers.ETag?.ToString(), response.Content.Headers.LastModified);
-                    if (!forceRefresh && key is not null && HasValue(next[fileName].Root, fileName, key))
+                    var root = JsonStoreCore.RequireObjectRoot(document.RootElement);
+                    next[fileName] = new CachedFile(root.Clone(), response.Headers.ETag?.ToString(), response.Content.Headers.LastModified);
+                    if (!forceRefresh && key is not null && JsonStoreCore.TryGetValue(root, key, candidate.IsNamespaceFile, out _))
                         break;
                 }
 
@@ -323,7 +349,7 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
             {
                 response.EnsureSuccessStatusCode();
                 if (_options.MaxDocumentBytes > 0)
-                    await response.Content.LoadIntoBufferAsync(_options.MaxDocumentBytes).ConfigureAwait(false);
+                    await response.Content.LoadIntoBufferAsync(_options.MaxDocumentBytes, cancellationToken).ConfigureAwait(false);
 #if NET8_0_OR_GREATER
                 await using Stream stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 #else
@@ -350,12 +376,14 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
         finally { _manifestGate.Release(); }
     }
 
-    private List<string> Candidates(CultureInfo culture, string? key)
+    private List<JsonFileCandidate> Candidates(CultureInfo culture, string? key)
     {
         var manifest = Volatile.Read(ref _manifest);
         if (manifest is null)
         {
-            return key is null ? JsonStoreCore.ResolveCandidates(culture, culture.Name, _options.FileMappings)
+            return key is null
+                ? [.. JsonStoreCore.ResolveCandidates(culture, culture.Name, _options.FileMappings)
+                    .Select(file => new JsonFileCandidate(file.Replace('\\', '/'), culture.Name, IsNamespaceFile: false))]
                 : JsonStoreCore.ResolveFileCandidates(culture, culture.Name, _options.FileMappings, key);
         }
 
@@ -373,32 +401,25 @@ public sealed class HttpJsonStore : ITranslationStore, IDisposable
             return [.. preload.SelectMany(name => manifest.Files.Where(file => JsonStoreCore.CultureFromPath(file)?.Equals(name, StringComparison.OrdinalIgnoreCase) == true ||
                     (_options.FileMappings.TryGetValue(name, out var mapped) && file.Equals(mapped.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase)))
                     .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase))
-                .Distinct(StringComparer.OrdinalIgnoreCase)];
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(file => new JsonFileCandidate(file, selected, IsNamespaceFile: false))];
         }
 
         return [.. JsonStoreCore.ResolveFileCandidates(CultureInfo.GetCultureInfo(selected), selected, _options.FileMappings, key)
-            .Select(static candidate => candidate.Replace('\\', '/'))
-            .Where(manifest.FileSet.Contains)];
+            .Where(candidate => manifest.FileSet.Contains(candidate.Path))];
     }
 
-    private static bool HasValue(JsonElement root, string fileName, string key) =>
-        JsonStoreCore.TryGetValue(root, key, out _) ||
-        (JsonStoreCore.IsNamespaceFile(fileName, key) &&
-         JsonStoreCore.TryGetValue(root, JsonStoreCore.GetLookupKey(key), out _));
-
-    private string? FindTemplate(string key, CultureInfo culture)
+    private (string Template, CultureInfo Culture)? FindTemplate(string key, CultureInfo culture)
     {
         if (!_cultures.TryGetValue(culture.Name, out var state)) return null;
         var documents = Volatile.Read(ref state.Documents);
         if (documents is null) return null;
-        foreach (var fileName in Candidates(culture, key))
+        foreach (var candidate in Candidates(culture, key))
         {
-            if (!documents.TryGetValue(fileName, out var root)) continue;
-            if (JsonStoreCore.TryGetValue(root.Root, key, out var value)
-                || (JsonStoreCore.IsNamespaceFile(fileName, key)
-                && JsonStoreCore.TryGetValue(root.Root, JsonStoreCore.GetLookupKey(key), out value)))
+            if (!documents.TryGetValue(candidate.Path, out var root)) continue;
+            if (JsonStoreCore.TryGetValue(root.Root, key, candidate.IsNamespaceFile, out var value))
             {
-                return value;
+                return (value, CultureInfo.GetCultureInfo(candidate.CultureName));
             }
         }
         return null;

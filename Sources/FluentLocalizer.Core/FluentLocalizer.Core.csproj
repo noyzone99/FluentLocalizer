@@ -4,11 +4,11 @@
 		<PackageId>FluentLocalizer</PackageId>
 		<Product>FluentLocalizer</Product>
 		<RootNamespace>FluentLocalizer</RootNamespace>
-		<Version>1.1.0</Version>
+		<Version>1.2.0</Version>
 		<Description>
 			Core library for building culture-aware translation pipelines in .NET with fluent APIs, ICU message syntax, and configurable fallback and error handling.
 		</Description>
-		<PackageReleaseNotes>Add a native .NET 11 target while retaining .NET Standard 2.0, .NET 8 and .NET 10 support. Public APIs and translation behavior are unchanged.</PackageReleaseNotes>
+		<PackageReleaseNotes>Add optional catalog culture reporting for ICU plurals and ordinals. Fix exception policies, concurrent option reads, Unicode casing and fallback tokens. Reuse ICU formatters with bounded caches.</PackageReleaseNotes>
 		<PackageTags>localization;translation;icu;messageformat;culture;fluent;dotnet</PackageTags>
 		<GenerateDependencyFile>false</GenerateDependencyFile>
 	</PropertyGroup>

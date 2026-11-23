@@ -149,11 +149,20 @@ internal static class DocsSets
     public static string ScopeNameKey(string scopeId) =>
         "Ui:Scope" + string.Concat(scopeId.Split('-').Select(part => char.ToUpperInvariant(part[0]) + part[1..]));
 
+    /// <summary>Finds the set targeted by a documentation alias. API aliases can select a particular release.</summary>
+    public static DocsSet ForAlias(string scopeId, string path, Uri address)
+    {
+        var version = path == ApiPage.Path ? SiteLinks.QueryValue(address.AbsoluteUri, "version") : null;
+        return version is not null && ApiReference.Scope(scopeId).Versions.Any(release => release.Version == version)
+            ? ForVersion(scopeId, version)
+            : Latest(scopeId);
+    }
+
     /// <summary>
     /// Maps an address of the documentation before it was versioned, such as <c>stores/json/file</c> or <c>api#api-jsonfilestore</c>,
-    /// to the matching page of the latest set.
+    /// to the matching page.
     /// </summary>
-    public static string? LegacyRoute(string path, string fragment)
+    public static string? LegacyRoute(string path, Uri address)
     {
         string scope = DefaultScope;
         if (path == "stores/json" || path.StartsWith("stores/json/", StringComparison.Ordinal))
@@ -161,13 +170,13 @@ internal static class DocsSets
             scope = "store-json";
             path = path["stores/json".Length..].TrimStart('/');
         }
-        else if (path == "api" && ApiReference.FindById(fragment) is { } type)
+        else if (path == ApiPage.Path && ApiReference.FindById(address.Fragment.TrimStart('#')) is { } type)
         {
             scope = type.Scope.Id;
         }
 
-        var set = Latest(scope);
+        var set = ForAlias(scope, path, address);
         var page = set.FindPath(path);
-        return page is null ? null : set.RouteOf(page) + (fragment.Length > 0 ? "#" + fragment : "");
+        return page is null ? null : set.RouteOf(page);
     }
 }

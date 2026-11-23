@@ -5,9 +5,9 @@ namespace FluentLocalizer.Store.Json;
 
 /// <summary>Compatibility wrapper for applications using the original mode-based JSON store API.</summary>
 [Obsolete("JsonStore is deprecated. Use JsonFileStore or EmbeddedJsonStore with their specific options.")]
-public sealed class JsonStore : ITranslationStore, IDisposable
+public sealed class JsonStore : ITranslationStoreWithCulture, IDisposable
 {
-    private readonly ITranslationStore _store;
+    private readonly ITranslationStoreWithCulture _store;
     private readonly JsonFileStore? _jfs;
 
     /// <summary>Creates a compatibility store that forwards to the selected dedicated JSON store.</summary>
@@ -24,6 +24,7 @@ public sealed class JsonStore : ITranslationStore, IDisposable
                     ResourcesPath = options.ResourcesPath,
                     FallbackCulture = options.FallbackCulture,
                     ThrowOnMissingStore = options.ThrowOnMissingStore,
+                    MaxDocumentBytes = options.MaxDocumentBytes,
                     ReloadOnChange = options.ReloadOnChange
                 };
                 CopyMappings(options, fileOptions);
@@ -37,6 +38,7 @@ public sealed class JsonStore : ITranslationStore, IDisposable
                     ResourcesPath = options.ResourcesPath,
                     ResourceAssembly = options.ResourceAssembly,
                     FallbackCulture = options.FallbackCulture,
+                    MaxDocumentBytes = options.MaxDocumentBytes,
                     ThrowOnMissingStore = options.ThrowOnMissingStore
                 };
                 CopyMappings(options, embeddedOptions);
@@ -53,6 +55,12 @@ public sealed class JsonStore : ITranslationStore, IDisposable
     /// <inheritdoc />
     public Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default) =>
         _store.GetTemplateAsync(key, culture, cancellationToken);
+
+    (string? Template, CultureInfo? Culture) ITranslationStoreWithCulture.GetTemplateWithCulture(string key, CultureInfo culture) =>
+        _store.GetTemplateWithCulture(key, culture);
+
+    Task<(string? Template, CultureInfo? Culture)> ITranslationStoreWithCulture.GetTemplateWithCultureAsync(
+        string key, CultureInfo culture, CancellationToken cancellationToken) => _store.GetTemplateWithCultureAsync(key, culture, cancellationToken);
 
     /// <inheritdoc />
     public void Dispose() => _jfs?.Dispose();

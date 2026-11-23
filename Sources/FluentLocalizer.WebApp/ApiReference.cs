@@ -169,15 +169,7 @@ internal sealed record ApiEvent(ApiEventKind Kind, ApiType Type, ApiMember? Memb
 /// <summary>Semantic versions: numeric parts first, a prerelease sorts before its release.</summary>
 internal static class ApiVersion
 {
-    public static int Compare(string left, string right)
-    {
-        var leftParts = left.Split('-', 2);
-        var rightParts = right.Split('-', 2);
-        var result = Version.Parse(leftParts[0]).CompareTo(Version.Parse(rightParts[0]));
-        if (result != 0) return result;
-        if (leftParts.Length != rightParts.Length) return leftParts.Length > rightParts.Length ? -1 : 1;
-        return leftParts.Length == 1 ? 0 : string.CompareOrdinal(leftParts[1], rightParts[1]);
-    }
+    public static int Compare(string left, string right) => Documentation.SemanticVersion.Compare(left, right);
 
     public static int Major(string version) => int.Parse(version.Split('.', 2)[0], System.Globalization.CultureInfo.InvariantCulture);
 }

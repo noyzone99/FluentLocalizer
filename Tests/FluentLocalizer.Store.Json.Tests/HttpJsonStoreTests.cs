@@ -72,6 +72,7 @@ public sealed class HttpJsonStoreTests
 
         using var strict = new HttpJsonStore(client, new HttpJsonStoreOptions { ThrowOnMissingStore = true });
         await Assert.ThrowsAsync<FileNotFoundException>(() => strict.GetTemplateAsync("Missing", new CultureInfo("it-IT"), TestContext.Current.CancellationToken));
+        Assert.Throws<FileNotFoundException>(() => strict.GetTemplate("Missing", CultureInfo.GetCultureInfo("en-US")));
     }
 
     [Fact]
@@ -131,8 +132,10 @@ public sealed class HttpJsonStoreTests
         Assert.Null(store.GetTemplate("Value", culture));
     }
 
-    [Fact]
-    public async Task Invalid_refresh_preserves_the_loaded_snapshot()
+    [Theory]
+    [InlineData("{invalid")]
+    [InlineData("[]")]
+    public async Task Invalid_refresh_preserves_the_loaded_snapshot(string invalidCatalog)
     {
         var content = "{\"Value\":\"before\"}";
         using var client = new HttpClient(new StubHttpHandler((_, _) => JsonResponse(content)))
@@ -141,7 +144,7 @@ public sealed class HttpJsonStoreTests
         var culture = new CultureInfo("it-IT");
         await store.LoadAsync(culture, TestContext.Current.CancellationToken);
 
-        content = "{invalid";
+        content = invalidCatalog;
         await Assert.ThrowsAnyAsync<System.Text.Json.JsonException>(() => store.RefreshStoreAsync(TestContext.Current.CancellationToken));
         Assert.Equal("before", store.GetTemplate("Value", culture));
     }
@@ -178,6 +181,35 @@ public sealed class HttpJsonStoreTests
         Assert.Equal("too large", await unlimited.GetTemplateAsync("Value", new CultureInfo("en-US"), TestContext.Current.CancellationToken));
     }
 
+    [Theory]
+    [InlineData(false, 128)]
+    [InlineData(true, 128)]
+#if !NET8_0_OR_GREATER
+    [InlineData(false, 0)]
+    [InlineData(true, 0)]
+#endif
+    public async Task Cancellation_while_reading_an_http_body_stops_the_lookup(bool useManifest, long maxBytes)
+    {
+        using var content = new StalledHttpContent();
+        using var client = new HttpClient(new StubHttpHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = content
+        })) { ServeManifest = useManifest }) { BaseAddress = new Uri("https://example.test/") };
+        using var store = new HttpJsonStore(client, new HttpJsonStoreOptions { MaxDocumentBytes = maxBytes });
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var lookup = store.GetTemplateAsync("Value", CultureInfo.GetCultureInfo("en-US"), cancellation.Token);
+
+        try
+        {
+            var timeout = Task.Delay(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Same(content.Started.Task, await Task.WhenAny(content.Started.Task, timeout));
+            cancellation.Cancel();
+            Assert.Same(lookup, await Task.WhenAny(lookup, timeout));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => lookup);
+        }
+        finally { content.Release.TrySetResult(true); }
+    }
+
     [Fact]
     public async Task Namespaced_lazy_lookup_loads_only_the_matching_bundle()
     {
@@ -196,6 +228,40 @@ public sealed class HttpJsonStoreTests
         Assert.Equal(firstRequestCount, handler.Requests.Count);
         Assert.Equal("Titolo", store.GetTemplate("common:Title", culture));
         Assert.DoesNotContain(handler.Requests, path => path.EndsWith("/it-IT.json", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("/locales/en.json")]
+    [InlineData("/locales/en/en.json")]
+    public async Task Combined_catalog_does_not_count_as_a_namespace_with_its_culture_name(string path)
+    {
+        var handler = new StubHttpHandler((request, _) => JsonResponse(request.RequestUri!.AbsolutePath == path
+            ? "{\"Value\":\"Top-level\"}" : null));
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("https://example.test/") };
+        using var store = new HttpJsonStore(client, new HttpJsonStoreOptions { FallbackCulture = "en" });
+        var culture = CultureInfo.GetCultureInfo("en");
+        var token = TestContext.Current.CancellationToken;
+
+        Assert.Null(await store.GetTemplateAsync("en:Value", culture, token));
+        Assert.Equal("Top-level", store.GetTemplate("Value", culture));
+    }
+
+    [Fact]
+    public async Task Manifest_classifies_reverse_namespace_names_by_the_regional_culture()
+    {
+        var handler = new StubHttpHandler((request, _) => JsonResponse(request.RequestUri!.AbsolutePath switch
+        {
+            "/locales/manifest.json" => "[\"ui.it-IT.json\"]",
+            "/locales/ui.it-IT.json" => "{\"Title\":\"Titolo\"}",
+            _ => null
+        })) { ServeManifest = true };
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("https://example.test/") };
+        using var store = new HttpJsonStore(client);
+        var culture = CultureInfo.GetCultureInfo("it-IT");
+
+        await store.LoadAsync(culture, TestContext.Current.CancellationToken);
+
+        Assert.Equal("Titolo", store.GetTemplate("ui:Title", culture));
     }
 
     [Fact]
@@ -296,6 +362,48 @@ public sealed class HttpJsonStoreTests
 
     #if NET8_0_OR_GREATER
     [Fact]
+    public async Task First_load_during_refresh_uses_the_refreshed_catalog()
+    {
+        var refreshStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRefresh = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var revision = "old";
+        var handler = new StubHttpHandler(async (request, token) =>
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/manifest.json", StringComparison.Ordinal))
+            {
+                if (request.Headers.CacheControl?.NoCache == true)
+                {
+                    refreshStarted.SetResult();
+                    await releaseRefresh.Task.WaitAsync(token);
+                    revision = "new";
+                }
+                return CreateJsonResponse("[\"en-US.json\",\"it-IT.json\"]");
+            }
+            return CreateJsonResponse($$"""{"Value":"{{revision}}"}""");
+        }) { ServeManifest = true };
+        using var client = new HttpClient(handler) { BaseAddress = new Uri("https://example.test/") };
+        using var store = new HttpJsonStore(client);
+        var token = TestContext.Current.CancellationToken;
+        var english = CultureInfo.GetCultureInfo("en-US");
+        var italian = CultureInfo.GetCultureInfo("it-IT");
+        await store.LoadAsync(english, token);
+
+        var refresh = store.RefreshStoreAsync(token);
+        Task<string?> italianLookup;
+        try
+        {
+            await refreshStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
+            italianLookup = store.GetTemplateAsync("Value", italian, token);
+        }
+        finally { releaseRefresh.SetResult(); }
+
+        await refresh.WaitAsync(TimeSpan.FromSeconds(5), token);
+        Assert.Equal("new", await italianLookup.WaitAsync(TimeSpan.FromSeconds(5), token));
+        Assert.Equal("new", store.GetTemplate("Value", italian));
+        Assert.Equal("new", store.GetTemplate("Value", english));
+    }
+
+    [Fact]
     public async Task Independent_cultures_can_load_while_another_request_is_pending()
     {
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -350,6 +458,29 @@ public sealed class HttpJsonStoreTests
     private static HttpResponseMessage CreateJsonResponse(string? json) => json is null
         ? new HttpResponseMessage(HttpStatusCode.NotFound)
         : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+
+    private sealed class StalledHttpContent : HttpContent
+    {
+        internal TaskCompletionSource<bool> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TaskCompletionSource<bool> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context)
+        {
+            Started.TrySetResult(true);
+            return Release.Task;
+        }
+
+#if NET8_0_OR_GREATER
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context, CancellationToken cancellationToken) =>
+            SerializeToStreamAsync(stream, context).WaitAsync(cancellationToken);
+#endif
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
 
     private sealed class StubHttpHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond) : HttpMessageHandler
     {

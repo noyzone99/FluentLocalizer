@@ -1,14 +1,14 @@
-# FluentLocalizer
+# ![](https://raw.githubusercontent.com/noyzone99/FluentLocalizer/main/Sources/FluentLocalizer.WebApp/wwwroot/favicon.svg) FluentLocalizer
 
-Version 1.1.0 adds a native `net11.0` target alongside `netstandard2.0`, `net8.0` and `net10.0`. Public APIs are unchanged; building this repository requires the .NET 11 SDK.
+Version 1.2.0 adds the optional `ITranslationStoreWithCulture` interface for catalog-aware ICU plural and ordinal rules. It retains `netstandard2.0`, `net8.0`, `net10.0` and `net11.0` targets. Building this repository requires the .NET 11 SDK.
 
 FluentLocalizer is the core package for building culture-aware translation pipelines in .NET applications. It provides a fluent API around an `ITranslationStore`, with templates written in the [ICU message syntax](https://unicode-org.github.io/icu/userguide/format_parse/messages/), runtime arguments, and configurable fallback behavior. Under the hood, templates are parsed and formatted by [MessageFormat](https://github.com/jeffijoe/messageformat.net), the open-source .NET library by Jeff Hansen.
 
-ICU (International Components for Unicode) is the Unicode standard for culture-aware formatting. It defines how languages handle plurals, numbers, dates, and message selection rules, so the same template can adapt to different locales without custom code. The official reference is https://unicode-org.github.io/icu/, and the [message formatting guide](https://unicode-org.github.io/icu/userguide/format_parse/messages/) describes the template syntax. A simple example is a plural rule such as `one{# item}` vs `other{# items}`, which is selected automatically for the current culture.
+ICU (International Components for Unicode) is the Unicode standard for culture-aware formatting. It defines how languages handle plurals, numbers, dates, and message selection rules, so the same template can adapt to different locales without custom code. The official reference is https://unicode-org.github.io/icu/, and the [message formatting guide](https://unicode-org.github.io/icu/userguide/format_parse/messages/) describes the template syntax. A plural block selects a branch such as `one{# item}` or `other{# items}` using the applicable culture's plural rules.
 
 ## Install
 
-For every public type and member in this package, see the [API reference](#api-reference). The [online documentation](https://berik-99.github.io/FluentLocalizer/docs/core) covers templates, requests, culture, errors and logging step by step.
+For every public type and member in this package, see the [API reference](#api-reference). The [online documentation](https://noyzone99.github.io/FluentLocalizer/docs/core) covers templates, requests, culture, errors and logging step by step.
 
 ```bash
 dotnet add package FluentLocalizer
@@ -58,13 +58,13 @@ Console.WriteLine(message); // Hello Ada!
 
 ## Culture selection
 
-**You normally don't call `WithCulture(...)`.** `translator.Get(key)` uses `CultureInfo.CurrentUICulture`, the culture of your user interface, both to look up the template and to format it, with `Resolve()` and `ResolveAsync()` alike. Set the UI culture where your application decides the user's language, and every request follows it:
+**You normally don't call `WithCulture(...)`.** `translator.Get(key)` captures `CultureInfo.CurrentUICulture` as the requested culture. Both `Resolve()` and `ResolveAsync()` use it to look up templates and format numbers and dates. Set the UI culture where your application decides the user's language.
 
 ```csharp
 using System.Globalization;
 
 var culture = CultureInfo.GetCultureInfo("it-IT");
-CultureInfo.CurrentUICulture = culture; // Translation lookup and message formatting.
+CultureInfo.CurrentUICulture = culture; // Translation lookup and number/date formatting in messages.
 CultureInfo.CurrentCulture = culture;   // Standard .NET number/date formatting elsewhere in the app.
 
 var message = translator.Get("Welcome").WithArg("name", "Ada").Resolve(); // Italian
@@ -79,6 +79,8 @@ var subject = translator.Get("Email:Subject").WithCulture(recipientCulture).Reso
 It affects that request only and never changes `CurrentUICulture` or `CurrentCulture`. If you pass the same culture to every request, set `CurrentUICulture` instead: repeating `WithCulture(...)` hides the real culture of the application and ignores later language changes.
 
 `Get(key)` captures the culture when it creates the builder, so create a new builder after changing it. Components that cache rendered text need their own update or rerender. On modern .NET, the ambient culture flows through task-based asynchronous operations.
+
+When a store supplies the catalog culture through `ITranslationStoreWithCulture`, ICU plural and ordinal rules follow that culture. Otherwise they follow the requested culture.
 
 For application-wide thread defaults, set `CultureInfo.DefaultThreadCurrentUICulture` and `CultureInfo.DefaultThreadCurrentCulture` at startup; these do not override explicitly set thread cultures. In ASP.NET Core, `app.UseRequestLocalization(...)` sets both cultures for each request, so `Get(key)` already follows the user's language; don't change the process-wide defaults per user.
 
@@ -162,7 +164,7 @@ var message = translator
 - MessageFormat supports `number` (default, `integer`, `percent`, `currency` — the currency of the culture), `date` (default/`short`, `full`), `time` (default, `short`), `selectordinal`, `offset:` and `=N` branches. Other styles are formatting errors. Literal braces are quoted with apostrophes (`'{name}'`), `''` prints one apostrophe, backslashes are not escapes.
 - `WithCase` runs after formatting. `Upper`/`Lower` use invariant casing; the four identifier casings split words at spaces, punctuation, case and digit boundaries and drop spaces and punctuation.
 - A `null`, empty or whitespace template, or a `KeyNotFoundException` from the store, is a missing translation. Other store exceptions propagate unchanged.
-- `WithCulture(null)` selects `CultureInfo.CurrentCulture`, not the UI culture. Even when the store serves a fallback culture's template, formatting and plural rules use the request culture.
+- `WithCulture(null)` selects `CultureInfo.CurrentCulture`.
 - `Translator` is stateless and thread-safe; `TranslationBuilder` is mutable and not thread-safe. The translator keeps a reference to its `TranslationOptions`, so later changes to that object affect new requests.
 
 ## Translation options
@@ -291,7 +293,7 @@ FluentLocalizer is intentionally small and extensible. It focuses on the transla
 
 ## Acknowledgments
 
-Message parsing and formatting are provided by [MessageFormat](https://github.com/jeffijoe/messageformat.net) by Jeff Hansen ([@jeffijoe](https://github.com/jeffijoe)), distributed under the MIT License. Many thanks to its author and contributors. See [THIRD-PARTY-NOTICES.md](https://github.com/berik-99/FluentLocalizer/blob/main/THIRD-PARTY-NOTICES.md) for the full notice.
+Message parsing and formatting are provided by [MessageFormat](https://github.com/jeffijoe/messageformat.net) by Jeff Hansen ([@jeffijoe](https://github.com/jeffijoe)), distributed under the MIT License. Many thanks to its author and contributors. See [THIRD-PARTY-NOTICES.md](https://github.com/noyzone99/FluentLocalizer/blob/main/THIRD-PARTY-NOTICES.md) for the full notice.
 
 <!-- api-reference:start -->
 ## API reference
@@ -300,13 +302,14 @@ Public types and members declared by FluentLocalizer, grouped by package and nam
 
 Version numbers shown for a type or member refer to the NuGet package named on that type.
 
-Signatures use C# notation; parameter names, defaults, return values and relevant exceptions are described alongside each member. Every type states the version that introduced it; later additions and deprecations are marked on each member, and the changes between versions are listed in the changelog. The searchable [WebUI API reference](https://berik-99.github.io/FluentLocalizer/docs/core/v1/api) uses the same catalog and can show any earlier version; the [changelog](https://berik-99.github.io/FluentLocalizer/changelog?scope=core) lists the changes of every release.
+Signatures use C# notation; parameter names, defaults, return values and relevant exceptions are described alongside each member. Every type states the version that introduced it; later additions and deprecations are marked on each member, and the changes between versions are listed in the changelog. The searchable [WebUI API reference](https://noyzone99.github.io/FluentLocalizer/docs/core/v1/api) uses the same catalog and can show any earlier version; the [changelog](https://noyzone99.github.io/FluentLocalizer/changelog?scope=core) lists the changes of every release.
 
 - [ITranslator](#api-itranslator)
 - [Translator](#api-translator)
 - [TranslationBuilder](#api-translationbuilder)
 - [TranslationOptions](#api-translationoptions)
 - [ITranslationStore](#api-itranslationstore)
+- [ITranslationStoreWithCulture](#api-itranslationstorewithculture)
 - [TranslationException](#api-translationexception)
 - [Gender](#api-gender)
 - [LetterCase](#api-lettercase)
@@ -329,7 +332,7 @@ Implemented by Translator. Each Get call creates a separate mutable builder.
 | --- | --- |
 | `TranslationBuilder Get(string key)` | key is the translation identifier. Returns a new builder; Translator captures CurrentUICulture at this call. A null key throws ArgumentNullException in Translator; empty keys are forwarded to the store. |
 
-[Source](https://github.com/berik-99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Interfaces/ITranslator.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Interfaces/ITranslator.cs)
 
 <a id="api-translator"></a>
 
@@ -344,9 +347,9 @@ The translator can be reused after a culture change. Create a new builder for ea
 | Member | Parameters, return value and behavior |
 | --- | --- |
 | `Translator(ITranslationStore store, TranslationOptions? options = null, ITranslationLogger? logger = null)` | store supplies templates and must not be null. options defaults to a new TranslationOptions; logger defaults to no logging. Stores the supplied references. Throws ArgumentNullException for a null store. |
-| `TranslationBuilder Get(string key)` | Returns a new builder for key using the configured store, options and logger. Captures CurrentUICulture for lookup and ICU message formatting. Throws ArgumentNullException for a null key. |
+| `TranslationBuilder Get(string key)` | Returns a new builder for key using the configured store, options and logger. Captures CurrentUICulture for lookup and for number and date formatting. Throws ArgumentNullException for a null key. |
 
-[Source](https://github.com/berik-99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Translator.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Translator.cs)
 
 <a id="api-translationbuilder"></a>
 
@@ -361,7 +364,7 @@ All With*, Pluralize and Genderize methods return the same builder. Culture is c
 | Member | Parameters, return value and behavior |
 | --- | --- |
 | `TranslationBuilder(ITranslationStore store, string key, TranslationOptions? options = null, CultureInfo? culture = null, ITranslationLogger? logger = null)` | store and key identify the template and cannot be null (ArgumentNullException). options defaults to a new TranslationOptions, culture to CurrentUICulture at construction and logger to no logging. |
-| `TranslationBuilder WithCulture(CultureInfo culture)` | culture overrides lookup and ICU message formatting for this request. Does not change CurrentUICulture or CurrentCulture. Although the parameter is declared non-nullable, passing null currently selects CurrentCulture, not CurrentUICulture. |
+| `TranslationBuilder WithCulture(CultureInfo culture)` | culture overrides catalog lookup and number and date formatting for this request. A store can supply the catalog culture for ICU plural and ordinal rules. CurrentUICulture and CurrentCulture keep their values. Passing null selects CurrentCulture. |
 | `TranslationBuilder WithCulture(string cultureName)` | cultureName is a .NET culture name, such as it-IT. Uses CultureInfo.GetCultureInfo. Throws ArgumentNullException for null and CultureNotFoundException for an unrecognized name. |
 | `TranslationBuilder WithOptions(TranslationOptions options)` | Replaces this builder's missing-key, formatting and default-argument policies with options. Passing null resets them to a new TranslationOptions despite the non-nullable signature. |
 | `TranslationBuilder WithArg(string name, object? value)` | Adds or replaces the named argument. Names are case-insensitive; value may be null. Runtime arguments override configured defaults. A null name throws ArgumentNullException. |
@@ -369,12 +372,12 @@ All With*, Pluralize and Genderize methods return the same builder. Culture is c
 | `TranslationBuilder Pluralize(int quantity)` | Sets the quantity argument to quantity. Equivalent to WithArg("quantity", quantity); the template's plural expression selects the branch. |
 | `TranslationBuilder Genderize(Gender gender)` | Sets the gender argument to the lowercase enum name (unspecified, male, female or neuter). Equivalent to WithArg with that string; select expressions choose the template branch. |
 | `TranslationBuilder WithCase(LetterCase letterCase)` | Selects a text transformation applied after formatting. Default is AsIs. Upper and Lower use invariant casing; the other transformations split words before recombining them. |
-| `string Resolve()` | Synchronously retrieves and formats the template. Returns a message or the configured fallback. Null, empty, whitespace templates and KeyNotFoundException are treated as missing translations. Missing-key or formatting policies may throw; other store errors propagate. HTTP stores require preloading for synchronous lookup. |
-| `Task<string> ResolveAsync(CancellationToken cancellationToken = default)` | Asynchronously retrieves the template using cancellationToken, then formats it with the builder's captured culture. Returns the message or configured fallback. Resolution policies match Resolve(); store failures and cancellation propagate. |
+| `string Resolve()` | Synchronously retrieves and formats the template. Returns a message or the configured fallback. A null, empty or whitespace template or a KeyNotFoundException from the store is treated as a missing translation. Missing-key and formatting policies may throw. Other store errors propagate. HTTP stores require preloading for synchronous lookup. |
+| `Task<string> ResolveAsync(CancellationToken cancellationToken = default)` | Asynchronously retrieves the template using cancellationToken. The requested culture formats numbers and dates. Stores implementing ITranslationStoreWithCulture can supply the culture for plural and ordinal rules. Resolution policies match Resolve(). Store failures and cancellation propagate. |
 | `string ToString()` | Overrides ToString by calling Resolve(). Performs a synchronous lookup each time and has the same fallback and exception behavior. |
 | `static implicit operator string(TranslationBuilder builder)` | Converts builder to a string by calling Resolve(). Supports assignments such as string message = translator.Get("Welcome"); performs synchronous resolution. |
 
-[Source](https://github.com/berik-99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/TranslationBuilder.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/TranslationBuilder.cs)
 
 <a id="api-translationoptions"></a>
 
@@ -400,7 +403,7 @@ Fallback strings replace {key} and {0} with the key, and {culture} and {1} with 
 | `Exception CreateMissingKeyException(string key, CultureInfo? culture)` | Returns the configured factory result or a TranslationException for key and culture. Direct calls do not throw the returned exception. Rejects null, empty or whitespace keys with ArgumentException (ArgumentNullException for null on modern targets); factory failures propagate. |
 | `Exception CreateFormattingException(string key, CultureInfo? culture, Exception? innerException)` | Returns the configured factory result, or a TranslationException whose message includes innerException.Message when available. The default exception does not attach innerException as InnerException. A null factory result uses CreateMissingKeyException. Key validation and factory failures match CreateMissingKeyException. |
 
-[Source](https://github.com/berik-99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/TranslationOptions.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/TranslationOptions.cs)
 
 <a id="api-itranslationstore"></a>
 
@@ -410,14 +413,31 @@ Kind: `interface` · Package: `FluentLocalizer` · Namespace: `FluentLocalizer` 
 
 Storage contract returning raw templates before formatting.
 
-Implementations own their fallback rules. A null result or KeyNotFoundException is treated as a missing translation by TranslationBuilder. Other failures propagate.
+Implementations own their fallback rules and can report the catalog culture through ITranslationStoreWithCulture. A null result or KeyNotFoundException from the store is treated as a missing translation by TranslationBuilder. Other failures propagate.
 
 | Member | Parameters, return value and behavior |
 | --- | --- |
 | `string? GetTemplate(string key, CultureInfo culture)` | key identifies the template; culture selects the translation. Returns the unformatted template or null. Must complete synchronously; cannot rely on asynchronous loading. |
 | `Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)` | Asynchronous counterpart returning the raw template or null. cancellationToken allows stores performing asynchronous I/O to cancel the operation. |
 
-[Source](https://github.com/berik-99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Interfaces/ITranslationStore.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Interfaces/ITranslationStore.cs)
+
+<a id="api-itranslationstorewithculture"></a>
+
+### ITranslationStoreWithCulture
+
+Kind: `interface` · Package: `FluentLocalizer` · Namespace: `FluentLocalizer` · Inherits: `ITranslationStore` · Since: `1.2.0`
+
+Optional storage contract that returns the culture of the catalog alongside its template.
+
+The catalog culture supplies ICU plural and ordinal rules. Numbers and dates keep the requested culture. Existing ITranslationStore implementations continue to use the requested culture for both.
+
+| Member | Parameters, return value and behavior |
+| --- | --- |
+| `ValueTuple<string?, CultureInfo?> GetTemplateWithCulture(string key, CultureInfo culture)` | Returns (Template, Culture) from a synchronous lookup. A null template is a miss. A null catalog culture uses the requested culture. |
+| `Task<ValueTuple<string?, CultureInfo?>> GetTemplateWithCultureAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)` | Returns (Template, Culture) from an asynchronous lookup. cancellationToken is forwarded to the store. A null template is a miss. A null catalog culture uses the requested culture. |
+
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Interfaces/ITranslationStoreWithCulture.cs)
 
 <a id="api-translationexception"></a>
 
@@ -435,7 +455,7 @@ Standard Exception members, including Message and InnerException, are inherited 
 | `string Key { get; }` | The translation key supplied to the constructor. |
 | `CultureInfo? Culture { get; }` | The requested culture supplied to the constructor; may be null. |
 
-[Source](https://github.com/berik-99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Exceptions/TranslationException.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Exceptions/TranslationException.cs)
 
 <a id="api-gender"></a>
 
@@ -452,7 +472,7 @@ Enum values accepted by Genderize.
 | `Female` | Supplies female to a select expression. |
 | `Neuter` | Supplies neuter to a select expression. |
 
-[Source](https://github.com/berik-99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Enums/Gender.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Enums/Gender.cs)
 
 <a id="api-lettercase"></a>
 
@@ -472,7 +492,7 @@ Enum transformations applied after message formatting.
 | `SnakeCase` | Joins lowercase words with underscores. |
 | `KebabCase` | Joins lowercase words with hyphens. |
 
-[Source](https://github.com/berik-99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Enums/LetterCase.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Enums/LetterCase.cs)
 
 <a id="api-missingtranslationbehavior"></a>
 
@@ -488,7 +508,7 @@ Enum controlling missing-key resolution.
 | `ThrowException` | Throws the configured missing-key exception or TranslationException. |
 | `ReturnConfiguredValue` | Returns MissingKeyFallbackValue after token replacement. |
 
-[Source](https://github.com/berik-99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Enums/MissingTranslationBehavior.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Enums/MissingTranslationBehavior.cs)
 
 <a id="api-formattingerrorbehavior"></a>
 
@@ -503,7 +523,7 @@ Enum controlling template parsing and formatting failures.
 | `ReturnPlaceholder` | Returns FormattingErrorFallbackValue after token replacement; default behavior. |
 | `ThrowException` | Throws the configured formatting exception or TranslationException. |
 
-[Source](https://github.com/berik-99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Enums/FormattingErrorBehavior.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Enums/FormattingErrorBehavior.cs)
 
 <a id="api-itranslationlogger"></a>
 
@@ -517,7 +537,7 @@ Optional contract for translation diagnostics.
 | --- | --- |
 | `void Log(TranslationLogLevel level, string message, Exception? exception = null)` | Writes message at level, with an optional exception. Implement this interface and pass it to Translator, or use the dependency injection logger adapter. |
 
-[Source](https://github.com/berik-99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Logging/ITranslationLogger.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Logging/ITranslationLogger.cs)
 
 <a id="api-translationloglevel"></a>
 
@@ -536,6 +556,6 @@ Enum severity levels passed to ITranslationLogger.
 | `Error` | Failures that stop normal resolution. |
 | `Critical` | Unrecoverable failures. |
 
-[Source](https://github.com/berik-99/FluentLocalizer/blob/core-v1.1.0/Sources/FluentLocalizer.Core/Logging/TranslationLogLevel.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Logging/TranslationLogLevel.cs)
 
 <!-- api-reference:end -->

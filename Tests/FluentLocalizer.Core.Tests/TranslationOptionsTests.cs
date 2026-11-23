@@ -55,4 +55,47 @@ public class TranslationOptionsTests
         Assert.Equal("welcome", exception.Key);
         Assert.Equal("it-IT", exception.Culture?.Name);
     }
+
+    [Fact]
+    public void Replacing_option_references_during_resolution_does_not_interrupt_readers()
+    {
+        var options = new TranslationOptions();
+        var arguments = new Dictionary<string, object?> { ["name"] = "Ada" };
+        var customException = new InvalidOperationException("Custom policy");
+        Func<string, CultureInfo?, Exception> factory = (_, _) => customException;
+        using var updating = new ManualResetEventSlim();
+        using var stop = new CancellationTokenSource();
+        var writer = new Thread(() =>
+        {
+            updating.Set();
+            while (!stop.IsCancellationRequested)
+            {
+                options.DefaultArguments = arguments;
+                options.MissingKeyExceptionFactory = factory;
+                options.FormattingErrorExceptionFactory = factory;
+                Thread.SpinWait(20);
+                options.DefaultArguments = null;
+                options.MissingKeyExceptionFactory = null;
+                options.FormattingErrorExceptionFactory = null;
+                Thread.SpinWait(20);
+            }
+        });
+        writer.Start();
+
+        try
+        {
+            updating.Wait(TestContext.Current.CancellationToken);
+            for (var index = 0; index < 100_000; index++)
+            {
+                options.CreateArgumentSet(null);
+                options.CreateMissingKeyException("welcome", null);
+                options.CreateFormattingException("welcome", null, null);
+            }
+        }
+        finally
+        {
+            stop.Cancel();
+            writer.Join();
+        }
+    }
 }

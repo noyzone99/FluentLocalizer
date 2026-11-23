@@ -6,8 +6,9 @@ using System.Text.Json;
 namespace FluentLocalizer.Store.Json;
 
 /// <summary>Loads and caches culture JSON files embedded in an assembly.</summary>
-public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
+public sealed class EmbeddedJsonStore : JsonTranslationStoreBase, ITranslationStoreWithCulture
 {
+    private const int CandidateCacheCapacity = 512;
     private readonly Assembly _assembly;
     private readonly Dictionary<string, Resource> _resources = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _namespaces = new(StringComparer.OrdinalIgnoreCase);
@@ -15,7 +16,7 @@ public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
     // Resources to search per culture and namespace, in lookup order. Only namespaces that have a file get an entry.
     private readonly ConcurrentDictionary<(string Culture, string Namespace), Candidate[]> _candidates = new();
 
-    private readonly record struct Candidate(Resource Resource, bool IsNamespaceFile);
+    private readonly record struct Candidate(Resource Resource, string CultureName, bool IsNamespaceFile);
 
     private sealed class Resource(string name)
     {
@@ -88,7 +89,15 @@ public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
     }
 
     /// <inheritdoc />
-    protected override string? FindTemplate(string key, CultureInfo culture)
+    protected override string? FindTemplate(string key, CultureInfo culture) => FindTemplateWithCulture(key, culture).Template;
+
+    (string? Template, CultureInfo? Culture) ITranslationStoreWithCulture.GetTemplateWithCulture(string key, CultureInfo culture) =>
+        GetCachedTemplate(key, culture);
+
+    Task<(string? Template, CultureInfo? Culture)> ITranslationStoreWithCulture.GetTemplateWithCultureAsync(
+        string key, CultureInfo culture, CancellationToken cancellationToken) => Task.FromResult(GetCachedTemplate(key, culture));
+
+    private protected override (string? Template, CultureInfo? Culture) FindTemplateWithCulture(string key, CultureInfo culture)
     {
         var rest = 0;
         var ns = _namespaces.Count == 0 ? null : JsonStoreCore.GetNamespace(key, out rest);
@@ -104,11 +113,11 @@ public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
                 (JsonStoreCore.TryGetValue(root, key, out var value) ||
                  candidate.IsNamespaceFile && JsonStoreCore.TryGetValue(root, key, rest, out value)))
             {
-                return value;
+                return (value, CultureInfo.GetCultureInfo(candidate.CultureName));
             }
         }
 
-        return null;
+        return default;
     }
 
     // Same order as the file and HTTP stores: for the culture, its neutral culture and then the fallback, the mapped
@@ -120,27 +129,32 @@ public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
 
         var candidates = new List<Candidate>();
         var seen = new HashSet<Resource>();
-        void Add(string? fileName, bool isNamespaceFile)
+        void Add(string? fileName, string cultureName, bool isNamespaceFile)
         {
             if (fileName is not null && _resources.TryGetValue(fileName, out var resource) && seen.Add(resource))
-                candidates.Add(new Candidate(resource, isNamespaceFile));
+                candidates.Add(new Candidate(resource, cultureName, isNamespaceFile));
         }
 
         void AddCulture(CultureInfo candidateCulture)
         {
-            if (Options.FileMappings.TryGetValue(candidateCulture.Name, out var mapped))
-                Add(mapped, ns.Length > 0 && JsonStoreCore.IsNamespaceFileName(mapped, ns));
             foreach (var name in new[] { candidateCulture.Name, candidateCulture.TwoLetterISOLanguageName })
             {
-                if (ns.Length > 0) Add($"{name}.{ns}.json", true);
-                Add(name + ".json", false);
+                if (Options.FileMappings.TryGetValue(name, out var mapped))
+                    Add(mapped, name, ns.Length > 0 && JsonStoreCore.IsNamespaceFileName(mapped, ns));
+                if (ns.Length > 0) Add($"{name}.{ns}.json", name, true);
+                Add(name + ".json", name, false);
             }
         }
 
         AddCulture(culture);
         if (!culture.Name.Equals(Options.FallbackCulture, StringComparison.OrdinalIgnoreCase))
             AddCulture(CultureInfo.GetCultureInfo(Options.FallbackCulture));
-        return _candidates.GetOrAdd(cacheKey, candidates.ToArray());
+        lock (_candidates)
+        {
+            if (_candidates.TryGetValue(cacheKey, out cached)) return cached;
+            if (_candidates.Count >= CandidateCacheCapacity) _candidates.Clear();
+            return _candidates[cacheKey] = candidates.ToArray();
+        }
     }
 
     private JsonElement? Load(Resource resource)
@@ -181,11 +195,11 @@ public sealed class EmbeddedJsonStore : JsonTranslationStoreBase
         {
             using var reader = new StreamReader(stream);
             using var text = JsonDocument.Parse(reader.ReadToEnd());
-            return text.RootElement.Clone();
+            return JsonStoreCore.RequireObjectRoot(text.RootElement).Clone();
         }
 
         using var document = JsonDocument.Parse(stream);
-        return document.RootElement.Clone();
+        return JsonStoreCore.RequireObjectRoot(document.RootElement).Clone();
     }
 
     private static bool HasUtf16OrUtf32Bom(Stream stream)

@@ -10,9 +10,9 @@ public sealed class WebAppIntegrationTests
     [Fact]
     public void Homepage_versions_follow_each_packages_release_scope()
     {
-        Assert.Equal("1.1.0", SiteLinks.PackageVersion("FluentLocalizer"));
-        Assert.Equal("1.1.0", SiteLinks.PackageVersion("FluentLocalizer.Extensions.DependencyInjection"));
-        Assert.Equal("1.2.0", SiteLinks.PackageVersion("FluentLocalizer.Store.Json"));
+        Assert.Equal("1.2.0", SiteLinks.PackageVersion("FluentLocalizer"));
+        Assert.Equal("1.2.0", SiteLinks.PackageVersion("FluentLocalizer.Extensions.DependencyInjection"));
+        Assert.Equal("1.3.0", SiteLinks.PackageVersion("FluentLocalizer.Store.Json"));
     }
 
     [Fact]
@@ -36,6 +36,16 @@ public sealed class WebAppIntegrationTests
         Assert.Throws<TranslationException>(() => first.Translator.Get("missing").Resolve());
         first.Store.Template = "{quantity, plural, one{item}";
         Assert.Throws<TranslationException>(() => first.Translator.Get("playground").Resolve());
+    }
+
+    [Theory]
+    [InlineData("100000000000000000000", "100000000000000000000m")]
+    [InlineData("9007199254740993.0", "9007199254740993.0m")]
+    [InlineData(" -2.50e-2 ", "-0.0250m")]
+    public void Playground_generates_decimal_literals_for_numbers_accepted_in_preview(string input, string expected)
+    {
+        Assert.True(PlaygroundSession.TryParseNumber(input, out var number));
+        Assert.Equal(expected, PlaygroundSession.NumberLiteral(number));
     }
 
     [Fact]
@@ -78,7 +88,7 @@ public sealed class WebAppIntegrationTests
         Assert.Contains(alpha, type => type.Name == "JsonStore" && type.IsDeprecatedIn("0.1.0-alpha"));
         var core = ApiReference.Scope("core");
         var json = ApiReference.Scope("store-json");
-        Assert.Equal("1.1.0", core.LatestRelease);
+        Assert.Equal("1.2.0", core.LatestRelease);
         Assert.Equal("0.0.1", json.FirstVersion);
         Assert.Empty(ApiReference.EventsIn(core, "1.0.0"));
         Assert.DoesNotContain(ApiReference.EventsIn(core, "0.1.0-alpha"), change => change.Kind == ApiEventKind.Added);

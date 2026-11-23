@@ -314,7 +314,7 @@
                 }
                 if (argument.Type == "number")
                 {
-                    if (!decimal.TryParse(argument.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
+                    if (!PlaygroundSession.TryParseNumber(argument.Value, out var number))
                     {
                         _error = Translator.Get("Ui:InvalidNumber").WithArg("name", name);
                         return;
@@ -340,7 +340,7 @@
             {
                 "translator.Get(\"playground\")",
                 $"    .WithCulture(\"{_culture}\") // Optional: overrides CurrentUICulture",
-                $"    .Pluralize({_quantity})",
+                $"    .Pluralize({_quantity.ToString(CultureInfo.InvariantCulture)})",
                 $"    .Genderize(Gender.{_gender})"
             };
             var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "quantity", "gender" };
@@ -348,7 +348,14 @@
             {
                 var name = argument.Name.Trim();
                 if (name.Length == 0 || !names.Add(name)) continue;
-                var value = argument.Type == "number" ? argument.Value : $"\"{Escape(argument.Value)}\"";
+                string value;
+                if (argument.Type == "number")
+                {
+                    if (!PlaygroundSession.TryParseNumber(argument.Value, out var number)) continue;
+                    value = PlaygroundSession.NumberLiteral(number);
+                }
+                else
+                    value = $"\"{Escape(argument.Value)}\"";
                 lines.Add($"    .WithArg(\"{Escape(name)}\", {value})");
             }
             lines.Add($"    .WithCase(LetterCase.{_letterCase})");

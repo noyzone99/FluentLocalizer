@@ -76,7 +76,7 @@ Release tags select the NuGet packages and their version:
 | Tag | Packages released |
 | --- | --- |
 | `core-vMAJOR.MINOR.PATCH` | `FluentLocalizer` and `FluentLocalizer.Extensions.DependencyInjection` |
-| `store-<name>-vMAJOR.MINOR.PATCH` | One `FluentLocalizer.Store.<Name>` package; lowercase its suffix and replace dots with hyphens for `<name>` (for example, `store-json-v1.0.1`) |
+| `store-<name>-vMAJOR.MINOR.PATCH` | One `FluentLocalizer.Store.<Name>` package; lowercase its suffix and replace dots with hyphens for `<name>` (for example, `store-json-v1.3.0`) |
 
 CI still builds and tests the full solution. A release tag packs and publishes only its selected package or packages. Keep each library project's `<Version>` at its latest published version: update Core and DI before a `core-v*` tag, or update only the selected store before its `store-*-v*` tag. A store's NuGet dependency on Core uses the Core project's version, so a store-only release does not inherit the store's version as its Core dependency.
 

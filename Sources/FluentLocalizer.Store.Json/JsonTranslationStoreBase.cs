@@ -10,8 +10,9 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
     private readonly ConcurrentDictionary<string, JsonElement> _documents = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly object _templateCacheLock = new();
-    private readonly Dictionary<string, LinkedListNode<(string Key, string Value)>> _templateCache = new(StringComparer.Ordinal);
-    private readonly LinkedList<(string Key, string Value)> _templateCacheOrder = new();
+    private readonly Dictionary<string, LinkedListNode<(string Key, string Template, CultureInfo? Culture)>> _templateCache = new(StringComparer.Ordinal);
+    private readonly LinkedList<(string Key, string Template, CultureInfo? Culture)> _templateCacheOrder = new();
+    private long _templateCacheGeneration;
     // ponytail: cap retained strings at 512 entries; tune only if real workloads need a different bound.
     private const int TemplateCacheCapacity = 512;
 
@@ -22,19 +23,19 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
     protected IReadOnlyList<string> ResolveCandidates(CultureInfo culture) =>
         JsonStoreCore.ResolveCandidates(culture, Options.FallbackCulture, Options.FileMappings);
 
-    /// <summary>Parses and caches a JSON document under its file name.</summary>
+    /// <summary>Parses and caches a JSON object under its file name.</summary>
     /// <param name="name">The file name used during culture resolution.</param>
     /// <param name="json">The JSON document contents.</param>
     protected void SetDocument(string name, string json)
     {
         using var document = JsonDocument.Parse(json);
-        _documents[name] = document.RootElement.Clone();
+        SetDocument(name, document.RootElement);
     }
 
-    /// <summary>Clones and caches a parsed JSON root element.</summary>
+    /// <summary>Clones and caches a parsed JSON root object.</summary>
     /// <param name="name">The file name used during culture resolution.</param>
     /// <param name="root">The JSON root element.</param>
-    protected void SetDocument(string name, JsonElement root) => _documents[name] = root.Clone();
+    protected void SetDocument(string name, JsonElement root) => _documents[name] = JsonStoreCore.RequireObjectRoot(root).Clone();
 
     /// <summary>Removes a cached JSON document.</summary>
     /// <param name="name">The cached file name.</param>
@@ -61,27 +62,37 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
     }
 
     /// <inheritdoc />
-    public virtual string? GetTemplate(string key, CultureInfo culture)
+    public virtual string? GetTemplate(string key, CultureInfo culture) => GetCachedTemplate(key, culture).Template;
+
+    private protected virtual (string? Template, CultureInfo? Culture) FindTemplateWithCulture(string key, CultureInfo culture) =>
+        (FindTemplate(key, culture), null);
+
+    private protected (string? Template, CultureInfo? Culture) GetCachedTemplate(string key, CultureInfo culture)
     {
         var cacheKey = culture.Name + "\0" + key;
+        long generation;
         lock (_templateCacheLock)
         {
             if (_templateCache.TryGetValue(cacheKey, out var cached))
             {
                 _templateCacheOrder.Remove(cached);
                 _templateCacheOrder.AddFirst(cached);
-                return cached.Value.Value;
+                return (cached.Value.Template, cached.Value.Culture);
             }
+            generation = _templateCacheGeneration;
         }
 
-        var result = FindTemplate(key, culture);
-        if (result is null && Options.ThrowOnMissingStore && !HasCandidate(culture))
+        var result = FindTemplateWithCulture(key, culture);
+        if (result.Template is null && Options.ThrowOnMissingStore && !HasCandidate(culture))
             throw new FileNotFoundException($"No translation files were found for culture '{culture.Name}' or fallback '{Options.FallbackCulture}'.");
 
-        if (result is not null)
+        if (result.Template is not null)
         {
             lock (_templateCacheLock)
             {
+                // A reload can invalidate a result while FindTemplate is still running.
+                if (generation != _templateCacheGeneration) return result;
+
                 if (_templateCache.TryGetValue(cacheKey, out var existing))
                 {
                     _templateCacheOrder.Remove(existing);
@@ -89,7 +100,7 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
                 }
                 else
                 {
-                    var node = _templateCacheOrder.AddFirst((cacheKey, result));
+                    var node = _templateCacheOrder.AddFirst((cacheKey, result.Template, result.Culture));
                     _templateCache.Add(cacheKey, node);
                     if (_templateCache.Count > TemplateCacheCapacity)
                     {
@@ -109,6 +120,7 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
     {
         lock (_templateCacheLock)
         {
+            _templateCacheGeneration++;
             _templateCache.Clear();
             _templateCacheOrder.Clear();
         }
@@ -119,8 +131,14 @@ public abstract class JsonTranslationStoreBase(JsonStoreSettings options) : ITra
         Task.FromResult(GetTemplate(key, culture));
 }
 
+internal readonly record struct JsonFileCandidate(string Path, string CultureName, bool IsNamespaceFile);
+
 internal static class JsonStoreCore
 {
+    internal static JsonElement RequireObjectRoot(JsonElement root) => root.ValueKind == JsonValueKind.Object
+        ? root
+        : throw new JsonException("A translation catalog must contain a JSON object at the root.");
+
     internal static string? CultureFromPath(string path)
     {
         var parts = path.Replace('\\', '/').Split('/');
@@ -131,8 +149,11 @@ internal static class JsonStoreCore
         if (TryCulture(stem, out var wholeCulture)) return wholeCulture;
         var separator = stem.IndexOf('.');
         if (separator < 0) return null;
-        if (TryCulture(stem[..separator], out var prefixCulture)) return prefixCulture;
-        return TryCulture(stem[(stem.LastIndexOf('.') + 1)..], out var suffixCulture) ? suffixCulture : null;
+        var hasPrefix = TryCulture(stem[..separator], out var prefixCulture);
+        var suffix = stem[(stem.LastIndexOf('.') + 1)..];
+        if ((!hasPrefix || !prefixCulture.Contains('-') && suffix.Contains('-')) && TryCulture(suffix, out var suffixCulture))
+            return suffixCulture;
+        return hasPrefix ? prefixCulture : null;
     }
 
     private static bool TryCulture(string name, out string culture)
@@ -192,55 +213,13 @@ internal static class JsonStoreCore
             if (seen.Add(candidate)) candidates.Add(candidate);
         }
 
-        if (mappings.TryGetValue(culture.Name, out var mapped)) Add(mapped);
-        Add($"{culture.Name}.json");
-        Add(culture.TwoLetterISOLanguageName + ".json");
-
-        if (!culture.Name.Equals(fallbackCulture, StringComparison.OrdinalIgnoreCase))
+        void AddCulture(CultureInfo candidate)
         {
-            if (mappings.TryGetValue(fallbackCulture, out var fallbackMapped)) Add(fallbackMapped);
-            var fallback = CultureInfo.GetCultureInfo(fallbackCulture);
-            Add(fallback.Name + ".json");
-            Add(fallback.TwoLetterISOLanguageName + ".json");
-        }
-
-        return candidates;
-    }
-
-    internal static List<string> ResolveFileCandidates(CultureInfo culture, string fallbackCulture, IDictionary<string, string> mappings, string key)
-    {
-        var segments = key.Split(':').Select(static segment => segment.Trim()).Where(static segment => segment.Length > 0).ToArray();
-        var namespaced = HasNamespace(segments);
-        var candidates = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        void Add(string? path)
-        {
-            if (!string.IsNullOrWhiteSpace(path) && seen.Add(path!)) candidates.Add(path!);
-        }
-
-        void AddCulture(CultureInfo candidateCulture)
-        {
-            if (mappings.TryGetValue(candidateCulture.Name, out var mapped)) Add(mapped);
-            if (namespaced)
-            {
-                Add($"{candidateCulture.Name}.{segments[0]}.json");
-                Add($"{segments[0]}.{candidateCulture.Name}.json");
-                Add(Path.Combine(candidateCulture.Name, segments[0] + ".json"));
-            }
-            Add(candidateCulture.Name + ".json");
-            Add(Path.Combine(candidateCulture.Name, candidateCulture.Name + ".json"));
-            if (!candidateCulture.Name.Equals(candidateCulture.TwoLetterISOLanguageName, StringComparison.OrdinalIgnoreCase))
-            {
-                if (namespaced)
-                {
-                    Add($"{candidateCulture.TwoLetterISOLanguageName}.{segments[0]}.json");
-                    Add($"{segments[0]}.{candidateCulture.TwoLetterISOLanguageName}.json");
-                    Add(Path.Combine(candidateCulture.TwoLetterISOLanguageName, segments[0] + ".json"));
-                }
-                Add(candidateCulture.TwoLetterISOLanguageName + ".json");
-                Add(Path.Combine(candidateCulture.TwoLetterISOLanguageName, candidateCulture.TwoLetterISOLanguageName + ".json"));
-            }
+            if (mappings.TryGetValue(candidate.Name, out var mapped)) Add(mapped);
+            Add(candidate.Name + ".json");
+            var neutral = candidate.TwoLetterISOLanguageName;
+            if (mappings.TryGetValue(neutral, out var neutralMapped)) Add(neutralMapped);
+            Add(neutral + ".json");
         }
 
         AddCulture(culture);
@@ -250,33 +229,61 @@ internal static class JsonStoreCore
         return candidates;
     }
 
-    internal static string GetLookupKey(string key)
+    internal static List<JsonFileCandidate> ResolveFileCandidates(CultureInfo culture, string fallbackCulture, IDictionary<string, string> mappings, string key)
     {
-        var segments = key.Split(':').Select(static segment => segment.Trim()).Where(static segment => segment.Length > 0).ToArray();
-        return HasNamespace(segments)
-            ? string.Join(":", segments.Skip(1))
-            : key;
-    }
+        var ns = GetNamespace(key, out _);
+        var candidates = new List<JsonFileCandidate>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-    internal static bool IsNamespaceFile(string candidate, string key)
-    {
-        var segments = key.Split(':').Select(static segment => segment.Trim()).Where(static segment => segment.Length > 0).ToArray();
-        if (!HasNamespace(segments))
-            return false;
+        void Add(string path, string cultureName, bool isNamespaceFile = false)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            var normalized = path.Replace('\\', '/');
+            if (seen.Add(normalized)) candidates.Add(new JsonFileCandidate(normalized, cultureName, isNamespaceFile));
+        }
 
-        return IsNamespaceFileName(candidate, segments[0]);
+        void AddVariant(string name)
+        {
+            if (mappings.TryGetValue(name, out var mapped)) Add(mapped, name, ns is not null && IsNamespaceFileName(mapped, ns));
+            if (ns is not null)
+            {
+                Add($"{name}.{ns}.json", name, isNamespaceFile: true);
+                Add($"{ns}.{name}.json", name, isNamespaceFile: true);
+                if (!name.Equals(ns, StringComparison.OrdinalIgnoreCase))
+                    Add(Path.Combine(name, ns + ".json"), name, isNamespaceFile: true);
+            }
+            Add(name + ".json", name);
+            Add(Path.Combine(name, name + ".json"), name);
+        }
+
+        void AddCulture(CultureInfo candidateCulture)
+        {
+            AddVariant(candidateCulture.Name);
+            var neutral = candidateCulture.TwoLetterISOLanguageName;
+            if (!candidateCulture.Name.Equals(neutral, StringComparison.OrdinalIgnoreCase))
+                AddVariant(neutral);
+        }
+
+        AddCulture(culture);
+        if (!culture.Name.Equals(fallbackCulture, StringComparison.OrdinalIgnoreCase))
+            AddCulture(CultureInfo.GetCultureInfo(fallbackCulture));
+
+        return candidates;
     }
 
     internal static bool IsNamespaceFileName(string candidate, string ns)
     {
         var normalized = candidate.Replace('\\', '/');
-        return normalized.StartsWith(ns + ".", StringComparison.OrdinalIgnoreCase) ||
-               normalized.EndsWith("." + ns + ".json", StringComparison.OrdinalIgnoreCase) ||
-               normalized.EndsWith("/" + ns + ".json", StringComparison.OrdinalIgnoreCase);
+        var fileName = ns + ".json";
+        if (normalized.Equals(fileName, StringComparison.OrdinalIgnoreCase)) return false;
+        if (normalized.StartsWith(ns + ".", StringComparison.OrdinalIgnoreCase) ||
+            normalized.EndsWith("." + fileName, StringComparison.OrdinalIgnoreCase)) return true;
+        return normalized.EndsWith("/" + fileName, StringComparison.OrdinalIgnoreCase) &&
+            !("/" + normalized).EndsWith("/" + ns + "/" + fileName, StringComparison.OrdinalIgnoreCase);
     }
 
-    // Same rule as HasNamespace without splitting the key: the first non-empty segment is the namespace when
-    // another non-empty segment follows. rest is where the key continues after that first segment.
+    // The first non-empty segment is the namespace when another non-empty segment follows.
+    // rest is where the key continues after that first segment.
     internal static string? GetNamespace(string key, out int rest)
     {
         rest = 0;
@@ -297,8 +304,6 @@ internal static class JsonStoreCore
 
         return null;
     }
-
-    private static bool HasNamespace(string[] segments) => segments.Length > 1 && IsNamespaceName(segments[0]);
 
     private static bool IsNamespaceName(string segment) =>
         segment.Length > 0 && segment is not "." and not ".." &&
@@ -330,12 +335,18 @@ internal static class JsonStoreCore
         }
         if (start >= resourceName.Length - 5) return null;
 
-        var segments = resourceName[start..^5].Split('.');
-        if (segments.Length != 2 || !TryCulture(segments[0], out var culture)) return null;
-        return segments[1].Split('-')[0].Equals(culture.Split('-')[0], StringComparison.OrdinalIgnoreCase)
-            ? null
-            : $"{culture}.{segments[1]}.json";
+        var stem = resourceName[start..^5];
+        var separator = stem.IndexOf('.');
+        if (separator < 0 || !TryCulture(stem[..separator], out var culture)) return null;
+        var ns = stem[(separator + 1)..];
+        if (!IsNamespaceName(ns) || !ns.Contains('.') && ns.Split('-')[0].Equals(culture.Split('-')[0], StringComparison.OrdinalIgnoreCase))
+            return null;
+        return $"{culture}.{ns}.json";
     }
+
+    internal static bool TryGetValue(JsonElement root, string key, bool isNamespaceFile, out string value) =>
+        TryGetValue(root, key, out value) ||
+        isNamespaceFile && GetNamespace(key, out var rest) is not null && TryGetValue(root, key, rest, out value);
 
     internal static bool TryGetValue(JsonElement root, string key, out string value) => TryGetValue(root, key, 0, out value);
 

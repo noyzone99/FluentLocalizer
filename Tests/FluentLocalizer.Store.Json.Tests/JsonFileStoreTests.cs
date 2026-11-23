@@ -30,6 +30,19 @@ public sealed class JsonFileStoreTests
         Assert.Equal("fallback", store.GetTemplate("Value", new CultureInfo("de-DE")));
     }
 
+    [Fact]
+    public void Requested_translation_is_found_before_selecting_the_fallback_culture()
+    {
+        using var files = new TemporaryLocaleDirectory();
+        files.Write("fr-FR.json", "{\"Value\":\"French\"}");
+        files.Write("en-GB.json", "{\"Value\":\"British English\"}");
+        using var store = new JsonFileStore(new JsonFileStoreOptions { ResourcesPath = files.Path });
+        var culture = CultureInfo.GetCultureInfo("fr-FR");
+
+        Assert.Equal("French", store.GetTemplate("Value", culture));
+        Assert.Throws<FileNotFoundException>(() => store.GetTemplate("Missing", culture));
+    }
+
     [Theory]
     [InlineData("it-IT.common.json", "specific flat namespace")]
     [InlineData("it-IT/common.json", "specific folder namespace")]
@@ -43,15 +56,30 @@ public sealed class JsonFileStoreTests
     }
 
     [Theory]
-    [InlineData("common.it-IT.json")]
-    [InlineData("it-IT.common.json")]
-    [InlineData("it-IT/common.json")]
-    public void Resolves_all_namespace_file_conventions(string path)
+    [InlineData("common.it-IT.json", "common")]
+    [InlineData("it-IT.common.json", "common")]
+    [InlineData("it-IT/common.json", "common")]
+    [InlineData("ui.it-IT.json", "ui")]
+    public void Resolves_all_namespace_file_conventions(string path, string ns)
     {
         using var files = new TemporaryLocaleDirectory();
         files.Write(path, "{\"Section\":{\"Title\":\"Titolo\"}}");
         using var store = new JsonFileStore(new JsonFileStoreOptions { ResourcesPath = files.Path });
-        Assert.Equal("Titolo", store.GetTemplate("common:Section:Title", new CultureInfo("it-IT")));
+        Assert.Equal("Titolo", store.GetTemplate($"{ns}:Section:Title", new CultureInfo("it-IT")));
+    }
+
+    [Theory]
+    [InlineData("en.json")]
+    [InlineData("en/en.json")]
+    public void Combined_catalog_does_not_count_as_a_namespace_with_its_culture_name(string path)
+    {
+        using var files = new TemporaryLocaleDirectory();
+        files.Write(path, "{\"Value\":\"Top-level\"}");
+        using var store = new JsonFileStore(new JsonFileStoreOptions { ResourcesPath = files.Path });
+        var culture = CultureInfo.GetCultureInfo("en");
+
+        Assert.Equal("Top-level", store.GetTemplate("Value", culture));
+        Assert.Null(store.GetTemplate("en:Value", culture));
     }
 
     [Fact]
@@ -240,11 +268,13 @@ public sealed class JsonFileStoreTests
         }));
     }
 
-    [Fact]
-    public void Invalid_json_is_skipped_by_default_and_throws_when_configured()
+    [Theory]
+    [InlineData("{not-json")]
+    [InlineData("[]")]
+    public void Invalid_catalogs_are_skipped_by_default_and_throw_when_configured(string json)
     {
         using var files = new TemporaryLocaleDirectory();
-        files.Write("it-IT.json", "{not-json");
+        files.Write("it-IT.json", json);
         using var quiet = new JsonFileStore(new JsonFileStoreOptions { ResourcesPath = files.Path });
         Assert.Null(quiet.GetTemplate("Value", new CultureInfo("it-IT")));
 
@@ -309,6 +339,31 @@ public sealed class JsonFileStoreTests
 
         File.Delete(path);
         AssertEventually(() => Assert.Null(store.GetTemplate(key, culture)));
+    }
+
+    [Fact]
+    public void Reload_on_change_invalidates_catalogs_when_culture_directories_move_or_disappear()
+    {
+        using var locales = new TemporaryLocaleDirectory();
+        locales.Write("en/common.json", "{\"Value\":\"moved\"}");
+        using var store = new JsonFileStore(new JsonFileStoreOptions
+        {
+            ResourcesPath = locales.Path,
+            FallbackCulture = "en",
+            ReloadOnChange = true
+        });
+        var english = CultureInfo.GetCultureInfo("en");
+        var french = CultureInfo.GetCultureInfo("fr");
+        const string key = "common:Value";
+        Assert.Equal("moved", store.GetTemplate(key, english));
+
+        var destination = Path.Combine(locales.Path, "fr");
+        Directory.Move(Path.Combine(locales.Path, "en"), destination);
+        AssertEventually(() => Assert.Null(store.GetTemplate(key, english)));
+        AssertEventually(() => Assert.Equal("moved", store.GetTemplate(key, french)));
+
+        Directory.Delete(destination, recursive: true);
+        AssertEventually(() => Assert.Null(store.GetTemplate(key, french)));
     }
 
     private static void AssertEventually(Action assertion)
