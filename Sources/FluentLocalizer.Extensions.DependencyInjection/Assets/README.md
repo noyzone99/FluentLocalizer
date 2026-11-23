@@ -56,13 +56,13 @@ var message = translator.Get("Welcome")
 
 ## Culture selection
 
-**You normally don't call `WithCulture(...)`.** `translator.Get(key)` uses `CultureInfo.CurrentUICulture`, the culture of your user interface, both to look up the template and to format it, with `Resolve()` and `ResolveAsync()` alike. Set the UI culture where your application decides the user's language, and every request follows it:
+**You normally don't call `WithCulture(...)`.** `translator.Get(key)` captures `CultureInfo.CurrentUICulture` as the requested culture. Both `Resolve()` and `ResolveAsync()` use it to look up templates and format numbers and dates. Set the UI culture where your application decides the user's language.
 
 ```csharp
 using System.Globalization;
 
 var culture = CultureInfo.GetCultureInfo("it-IT");
-CultureInfo.CurrentUICulture = culture; // Translation lookup and message formatting.
+CultureInfo.CurrentUICulture = culture; // Translation lookup and number/date formatting in messages.
 CultureInfo.CurrentCulture = culture;   // Standard .NET number/date formatting elsewhere in the app.
 
 var message = translator.Get("Welcome").WithArg("name", "Ada").Resolve(); // Italian
@@ -78,7 +78,7 @@ It affects that request only and never changes `CurrentUICulture` or `CurrentCul
 
 `Get(key)` captures the culture when it creates the builder, so create a new builder after changing it. Components that cache rendered text need their own update or rerender. On modern .NET, the ambient culture flows through task-based asynchronous operations.
 
-The requested culture controls number and date formatting. A store implementing `ITranslationStoreWithCulture` can supply the catalog culture for ICU plural and ordinal rules. `FluentLocalizer.Store.Json` reports this culture starting with version 1.3.0.
+A store implementing `ITranslationStoreWithCulture` can supply the catalog culture for ICU plural and ordinal rules. Otherwise those rules follow the requested culture. `FluentLocalizer.Store.Json` reports the catalog culture starting with version 1.3.0.
 
 For application-wide thread defaults, set `CultureInfo.DefaultThreadCurrentUICulture` and `CultureInfo.DefaultThreadCurrentCulture` at startup; these do not override explicitly set thread cultures. In ASP.NET Core, `app.UseRequestLocalization(...)` sets both cultures for each request, so `Get(key)` already follows the user's language; don't change the process-wide defaults per user.
 
@@ -219,7 +219,7 @@ Registers ITranslator as a singleton. Register ITranslationStore before resolvin
 | `static FluentLocalizerBuilder AddFluentLocalizer(this IServiceCollection services, Action<TranslationOptions>? configure = null)` | services is the DI collection and cannot be null (ArgumentNullException). configure optionally configures IOptions<TranslationOptions>. Returns a FluentLocalizerBuilder for store/logger registration. |
 | `static FluentLocalizerBuilder AddFluentLocalizer(this IServiceCollection services, TranslationOptions translationOptions)` | Registers the supplied translationOptions instance through IOptions and adds the translator. Returns a builder. Null services or translationOptions throw ArgumentNullException. Use a typed argument when passing null to avoid overload ambiguity. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Extensions.DependencyInjection/FluentLocalizerServiceCollectionExtensions.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Extensions.DependencyInjection/FluentLocalizerServiceCollectionExtensions.cs)
 
 <a id="api-fluentlocalizerbuilder"></a>
 
@@ -239,6 +239,6 @@ Despite its namespace, this type belongs to the dependency injection package. Wi
 | `FluentLocalizerBuilder WithStore(Func<IServiceProvider, ITranslationStore> factory)` | Registers a singleton store factory. factory receives the service provider on resolution. A null factory throws ArgumentNullException. The DI container owns disposable stores created by the factory. |
 | `FluentLocalizerBuilder WithLogger()` | Registers a singleton ITranslationLogger adapter using ILogger<Translator>. Configure Microsoft.Extensions.Logging services and providers so ILogger<Translator> can be resolved. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Extensions.DependencyInjection/FluentLocalizerBuilder.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Extensions.DependencyInjection/FluentLocalizerBuilder.cs)
 
 <!-- api-reference:end -->

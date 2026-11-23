@@ -31,13 +31,13 @@ var message = translator
 
 ## Culture selection
 
-**You normally don't call `WithCulture(...)`.** `translator.Get(key)` uses `CultureInfo.CurrentUICulture`, the culture of your user interface, both to look up the template and to format it, with `Resolve()` and `ResolveAsync()` alike. Set the UI culture where your application decides the user's language, and every request follows it:
+**You normally don't call `WithCulture(...)`.** `translator.Get(key)` captures `CultureInfo.CurrentUICulture` as the requested culture. Both `Resolve()` and `ResolveAsync()` use it to look up templates and format numbers and dates. Set the UI culture where your application decides the user's language.
 
 ```csharp
 using System.Globalization;
 
 var culture = CultureInfo.GetCultureInfo("it-IT");
-CultureInfo.CurrentUICulture = culture; // Translation lookup and message formatting.
+CultureInfo.CurrentUICulture = culture; // Translation lookup and number/date formatting in messages.
 CultureInfo.CurrentCulture = culture;   // Standard .NET number/date formatting elsewhere in the app.
 
 var message = translator.Get("Welcome").WithArg("name", "Ada").Resolve(); // Italian
@@ -53,7 +53,7 @@ It affects that request only and never changes `CurrentUICulture` or `CurrentCul
 
 `Get(key)` captures the culture when it creates the builder, so create a new builder after changing it. Components that cache rendered text need their own update or rerender. On modern .NET, the ambient culture flows through task-based asynchronous operations.
 
-The requested culture controls number and date formatting. JSON stores report the culture of the catalog that supplied the template, so the ICU `plural` and `selectordinal` blocks follow the language of that template even on fallback. When `FileMappings` selects a catalog, its mapping key supplies the culture. Custom stores can opt in by implementing `ITranslationStoreWithCulture`. Stores that use `ITranslationStore` continue to use the requested culture for plural rules.
+JSON stores report the culture of the catalog that supplied the template, so the ICU `plural` and `selectordinal` blocks follow that culture even on fallback. When `FileMappings` selects a catalog, its mapping key supplies the culture. Custom stores can opt in by implementing `ITranslationStoreWithCulture`. If the store supplies no catalog culture, plurals and ordinals follow the requested culture.
 
 For application-wide thread defaults, set `CultureInfo.DefaultThreadCurrentUICulture` and `CultureInfo.DefaultThreadCurrentCulture` at startup; these do not override explicitly set thread cultures. In ASP.NET Core, `app.UseRequestLocalization(...)` sets both cultures for each request, so `Get(key)` already follows the user's language; don't change the process-wide defaults per user.
 

@@ -117,6 +117,7 @@ Namespace files, on-demand loading and lower memory use for EmbeddedJsonStore.
 ### Fixed
 
 - Embedded files named like `it.common.json` were all stored under `common.json`, so files of different cultures replaced each other. Each now keeps its culture in its name; the previous name still works as a file mapping when no other file uses it.
+- With a manifest, `HttpJsonStore.LoadAsync` also preloads listed neutral-culture catalogs so synchronous lookups use the same neutral fallback as asynchronous lookups.
 
 <details><summary>Public API changes (2)</summary>
 
@@ -124,22 +125,6 @@ Namespace files, on-demand loading and lower memory use for EmbeddedJsonStore.
 - Changed: `EmbeddedJsonStore` — Reads namespace files such as it-IT.common.json, which earlier versions keyed by their last segment, common.json, so the files of different cultures replaced each other. A key with a namespace is looked for in its namespace file before the culture file. FileMappings can still use the last segment when no other file has that name.
 
 </details>
-
-## JSON store 1.0.1 (2026-10-11)
-
-Packages: `FluentLocalizer.Store.Json`
-
-Fixed neutral-culture fallback after manifest preloading in HttpJsonStore.
-
-### Changed
-
-- Updated the `HttpJsonStore.LoadAsync` API reference and package documentation to describe manifest-based neutral-culture preloading.
-
-### Fixed
-
-- With a manifest, `HttpJsonStore.LoadAsync` now preloads catalog files listed for the neutral culture too. Synchronous `GetTemplate` can therefore use the same neutral-culture fallback as `GetTemplateAsync` after preloading.
-
-No public API changes in this version.
 
 ## Core 1.0.0 (2026-10-02)
 
