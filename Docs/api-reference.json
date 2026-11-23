@@ -57,7 +57,8 @@
         },
         {
           "Version": "1.2.0",
-          "SourceRevision": "core-v1.2.0",
+          "Date": "2026-11-23",
+          "SourceRevision": "02389a6b4c4960e94475ec5f8f4116d260e339ed",
           "Summary": "Catalog-aware plurals and ordinals, more reliable translation resolution, and updated examples and documentation.",
           "Notes": [
             {"Kind": "Added", "Text": "The optional `ITranslationStoreWithCulture` contract lets stores supply ICU plural and ordinal rules from the catalog culture. Number and date formats follow the requested culture. See [Culture selection](docs/core/v1/culture#fallback)."},
@@ -133,7 +134,8 @@
         },
         {
           "Version": "1.3.0",
-          "SourceRevision": "store-json-v1.3.0",
+          "Date": "2026-11-23",
+          "SourceRevision": "02389a6b4c4960e94475ec5f8f4116d260e339ed",
           "Summary": "Catalog-culture reporting, atomic HTTP refresh, cancellable response reads and consistent JSON lookup.",
           "Notes": [
             {"Kind": "Added", "Text": "The JSON stores report the selected catalog culture through `ITranslationStoreWithCulture`. This release depends on FluentLocalizer 1.2.0."},

@@ -330,7 +330,7 @@ Implemented by Translator. Each Get call creates a separate mutable builder.
 | --- | --- |
 | `TranslationBuilder Get(string key)` | key is the translation identifier. Returns a new builder; Translator captures CurrentUICulture at this call. A null key throws ArgumentNullException in Translator; empty keys are forwarded to the store. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Interfaces/ITranslator.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Core/Interfaces/ITranslator.cs)
 
 <a id="api-translator"></a>
 
@@ -347,7 +347,7 @@ The translator can be reused after a culture change. Create a new builder for ea
 | `Translator(ITranslationStore store, TranslationOptions? options = null, ITranslationLogger? logger = null)` | store supplies templates and must not be null. options defaults to a new TranslationOptions; logger defaults to no logging. Stores the supplied references. Throws ArgumentNullException for a null store. |
 | `TranslationBuilder Get(string key)` | Returns a new builder for key using the configured store, options and logger. Captures CurrentUICulture for lookup and ICU message formatting. Throws ArgumentNullException for a null key. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Translator.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Core/Translator.cs)
 
 <a id="api-translationbuilder"></a>
 
@@ -375,7 +375,7 @@ All With*, Pluralize and Genderize methods return the same builder. Culture is c
 | `string ToString()` | Overrides ToString by calling Resolve(). Performs a synchronous lookup each time and has the same fallback and exception behavior. |
 | `static implicit operator string(TranslationBuilder builder)` | Converts builder to a string by calling Resolve(). Supports assignments such as string message = translator.Get("Welcome"); performs synchronous resolution. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/TranslationBuilder.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Core/TranslationBuilder.cs)
 
 <a id="api-translationoptions"></a>
 
@@ -401,7 +401,7 @@ Fallback strings replace {key} and {0} with the key, and {culture} and {1} with 
 | `Exception CreateMissingKeyException(string key, CultureInfo? culture)` | Returns the configured factory result or a TranslationException for key and culture. Direct calls do not throw the returned exception. Rejects null, empty or whitespace keys with ArgumentException (ArgumentNullException for null on modern targets); factory failures propagate. |
 | `Exception CreateFormattingException(string key, CultureInfo? culture, Exception? innerException)` | Returns the configured factory result, or a TranslationException whose message includes innerException.Message when available. The default exception does not attach innerException as InnerException. A null factory result uses CreateMissingKeyException. Key validation and factory failures match CreateMissingKeyException. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/TranslationOptions.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Core/TranslationOptions.cs)
 
 <a id="api-itranslationstore"></a>
 
@@ -418,7 +418,7 @@ Implementations own their fallback rules and can report the catalog culture thro
 | `string? GetTemplate(string key, CultureInfo culture)` | key identifies the template; culture selects the translation. Returns the unformatted template or null. Must complete synchronously; cannot rely on asynchronous loading. |
 | `Task<string?> GetTemplateAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)` | Asynchronous counterpart returning the raw template or null. cancellationToken allows stores performing asynchronous I/O to cancel the operation. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Interfaces/ITranslationStore.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Core/Interfaces/ITranslationStore.cs)
 
 <a id="api-itranslationstorewithculture"></a>
 
@@ -435,7 +435,7 @@ The catalog culture supplies ICU plural and ordinal rules. Numbers and dates kee
 | `ValueTuple<string?, CultureInfo?> GetTemplateWithCulture(string key, CultureInfo culture)` | Returns (Template, Culture) from a synchronous lookup. A null template is a miss. A null catalog culture uses the requested culture. |
 | `Task<ValueTuple<string?, CultureInfo?>> GetTemplateWithCultureAsync(string key, CultureInfo culture, CancellationToken cancellationToken = default)` | Returns (Template, Culture) from an asynchronous lookup. cancellationToken is forwarded to the store. A null template is a miss. A null catalog culture uses the requested culture. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Interfaces/ITranslationStoreWithCulture.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Core/Interfaces/ITranslationStoreWithCulture.cs)
 
 <a id="api-translationexception"></a>
 
@@ -453,7 +453,7 @@ Standard Exception members, including Message and InnerException, are inherited 
 | `string Key { get; }` | The translation key supplied to the constructor. |
 | `CultureInfo? Culture { get; }` | The requested culture supplied to the constructor; may be null. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Exceptions/TranslationException.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Core/Exceptions/TranslationException.cs)
 
 <a id="api-gender"></a>
 
@@ -470,7 +470,7 @@ Enum values accepted by Genderize.
 | `Female` | Supplies female to a select expression. |
 | `Neuter` | Supplies neuter to a select expression. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Enums/Gender.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Core/Enums/Gender.cs)
 
 <a id="api-lettercase"></a>
 
@@ -490,7 +490,7 @@ Enum transformations applied after message formatting.
 | `SnakeCase` | Joins lowercase words with underscores. |
 | `KebabCase` | Joins lowercase words with hyphens. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Enums/LetterCase.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Core/Enums/LetterCase.cs)
 
 <a id="api-missingtranslationbehavior"></a>
 
@@ -506,7 +506,7 @@ Enum controlling missing-key resolution.
 | `ThrowException` | Throws the configured missing-key exception or TranslationException. |
 | `ReturnConfiguredValue` | Returns MissingKeyFallbackValue after token replacement. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Enums/MissingTranslationBehavior.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Core/Enums/MissingTranslationBehavior.cs)
 
 <a id="api-formattingerrorbehavior"></a>
 
@@ -521,7 +521,7 @@ Enum controlling template parsing and formatting failures.
 | `ReturnPlaceholder` | Returns FormattingErrorFallbackValue after token replacement; default behavior. |
 | `ThrowException` | Throws the configured formatting exception or TranslationException. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Enums/FormattingErrorBehavior.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Core/Enums/FormattingErrorBehavior.cs)
 
 <a id="api-itranslationlogger"></a>
 
@@ -535,7 +535,7 @@ Optional contract for translation diagnostics.
 | --- | --- |
 | `void Log(TranslationLogLevel level, string message, Exception? exception = null)` | Writes message at level, with an optional exception. Implement this interface and pass it to Translator, or use the dependency injection logger adapter. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Logging/ITranslationLogger.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Core/Logging/ITranslationLogger.cs)
 
 <a id="api-translationloglevel"></a>
 
@@ -554,6 +554,6 @@ Enum severity levels passed to ITranslationLogger.
 | `Error` | Failures that stop normal resolution. |
 | `Critical` | Unrecoverable failures. |
 
-[Source](https://github.com/noyzone99/FluentLocalizer/blob/core-v1.2.0/Sources/FluentLocalizer.Core/Logging/TranslationLogLevel.cs)
+[Source](https://github.com/noyzone99/FluentLocalizer/blob/02389a6b4c4960e94475ec5f8f4116d260e339ed/Sources/FluentLocalizer.Core/Logging/TranslationLogLevel.cs)
 
 <!-- api-reference:end -->

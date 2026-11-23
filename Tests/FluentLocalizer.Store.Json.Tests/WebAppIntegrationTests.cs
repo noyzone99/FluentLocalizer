@@ -10,9 +10,9 @@ public sealed class WebAppIntegrationTests
     [Fact]
     public void Homepage_versions_follow_each_packages_release_scope()
     {
-        Assert.Equal("1.1.0", SiteLinks.PackageVersion("FluentLocalizer"));
-        Assert.Equal("1.1.0", SiteLinks.PackageVersion("FluentLocalizer.Extensions.DependencyInjection"));
-        Assert.Equal("1.2.0", SiteLinks.PackageVersion("FluentLocalizer.Store.Json"));
+        Assert.Equal("1.2.0", SiteLinks.PackageVersion("FluentLocalizer"));
+        Assert.Equal("1.2.0", SiteLinks.PackageVersion("FluentLocalizer.Extensions.DependencyInjection"));
+        Assert.Equal("1.3.0", SiteLinks.PackageVersion("FluentLocalizer.Store.Json"));
     }
 
     [Fact]
@@ -88,7 +88,7 @@ public sealed class WebAppIntegrationTests
         Assert.Contains(alpha, type => type.Name == "JsonStore" && type.IsDeprecatedIn("0.1.0-alpha"));
         var core = ApiReference.Scope("core");
         var json = ApiReference.Scope("store-json");
-        Assert.Equal("1.1.0", core.LatestRelease);
+        Assert.Equal("1.2.0", core.LatestRelease);
         Assert.Equal("0.0.1", json.FirstVersion);
         Assert.Empty(ApiReference.EventsIn(core, "1.0.0"));
         Assert.DoesNotContain(ApiReference.EventsIn(core, "0.1.0-alpha"), change => change.Kind == ApiEventKind.Added);

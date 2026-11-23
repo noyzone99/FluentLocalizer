@@ -4,7 +4,7 @@
 
 Every release of the FluentLocalizer packages, newest first. The [WebUI changelog](https://noyzone99.github.io/FluentLocalizer/changelog) shows the same notes with links to the API reference of each version.
 
-## Core 1.2.0 (not released yet)
+## Core 1.2.0 (2026-11-23)
 
 Packages: `FluentLocalizer`, `FluentLocalizer.Extensions.DependencyInjection`
 
@@ -30,7 +30,7 @@ Catalog-aware plurals and ordinals, more reliable translation resolution, and up
 
 </details>
 
-## JSON store 1.3.0 (not released yet)
+## JSON store 1.3.0 (2026-11-23)
 
 Packages: `FluentLocalizer.Store.Json`
 
